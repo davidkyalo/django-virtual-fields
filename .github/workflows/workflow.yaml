@@ -1,0 +1,127 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [master, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Run Tests
+    if: github.ref == 'xxx'
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Set up PostgreSQL
+        uses: harmon758/postgresql-action@v1
+        if: matrix.platform == 'ubuntu-latest'
+        with:
+            postgresql version: '12.14'
+            postgresql user: 'root' 
+            postgresql password: 'root' 
+      - name: Set up MySQL
+        if: matrix.platform == 'ubuntu-latest'
+        run: sudo /etc/init.d/mysql start
+      - name: Install dependencies
+        run: |
+            python -m pip install --upgrade pip
+            python -m pip install tox tox-gh-actions
+      - name: Test - run tox
+        run: tox p -- --cov-append --cov-report xml
+        env:
+            PLATFORM: ${{ matrix.platform }}
+            DATABASES: mysql=mysql://root:root@localhost/test_db;pgsql=postgres://root:root@localhost/test_db;sqlite=sqlite:////tmp/test-sqlite.db
+      - name: Upload code coverage
+        if: matrix.platform == 'ubuntu-latest'
+        uses: codecov/codecov-action@v3
+        with:
+            token: ${{ secrets.CODECOV_TOKEN }}
+            file: ./coverage.xml
+            name: django-virtual-fields
+            env_vars: OS,PYTHON
+            fail_ci_if_error: true
+  version-check:
+    name: Check Version Bump
+    if: github.ref == 'xxx'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          path: current
+      - uses: actions/checkout@v2
+        with:
+          ref: master
+          path: master
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1.3.0
+      - name: Check version bump
+        run: |
+          cd $GITHUB_WORKSPACE/current
+          NEW_VERSION=$(poetry version -s)
+          cd $GITHUB_WORKSPACE/master
+          OLD_VERSION=$(poetry version -s)
+          python -c "from packaging import version;assert version.parse(\"${NEW_VERSION}\") > version.parse(\"${OLD_VERSION}\"), \"❌ Bad version bump detected: you must bump the version in pyproject.toml\""
+          python -c "print(\"✅ Version will be bumped from ${OLD_VERSION} to ${NEW_VERSION}\")"
+  docs:
+    if: github.ref == 'refs/heads/master'
+    concurrency: docs-branch
+    name: 🚀 Deploy Docs 📄
+    runs-on: ubuntu-latest
+    needs: ["test"]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # fetch all commits/branches
+      - name: Set up Python
+        uses: actions/setup-python@v2
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1.3.0
+      - name: Deploy docs
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          MAJOR=$(echo $(poetry version -s) | cut -d "." -f 1)
+          MINOR=$(echo $(poetry version -s) | cut -d "." -f 2)
+          poetry install --with docs
+          poetry run mike deploy --push --update-aliases --branch gh-docs $MAJOR.$MINOR.x latest
+  pypi:
+    if: github.ref == 'refs/heads/master'
+    name: 🚀 PyPi Release 📦
+    runs-on: ubuntu-latest
+    needs: ["test"]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1.3.0
+      - name: Release on PyPi
+        continue-on-error: true # allow pushes to master that don't release
+        id: pypi
+        run: |
+          PACKAGE_VERSION=$(poetry version -s)
+          echo "package_version=$PACKAGE_VERSION" >> $GITHUB_ENV
+          printf "\nSee this release on GitHub: [v$PACKAGE_VERSION](https://github.com/$GITHUB_REPOSITORY/releases/tag/$PACKAGE_VERSION)\n" >> README.md
+          poetry config pypi-token.pypi "${{ secrets.PYPI_API_TOKEN }}"
+          poetry publish --build
+      - name: 🚀 Create GitHub Release 😺
+        uses: ncipollo/release-action@v1
+        if: steps.pypi.outcome == 'success'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ env.package_version }}
+          generateReleaseNotes: true

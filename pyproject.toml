@@ -1,0 +1,93 @@
+[tool.poetry]
+name = "Django-Virtual-Fields"
+version = "0.0.0a0"
+description = "Virtual `django` fields."
+authors = ["David Kyalo <davidmkyalo@gmail.com>"]
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+packages = [
+    { include = "virtual_fields" },
+]
+
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+Django = ">=3.2.0"
+typing-extensions = ">=4.4.0"
+zana = {version = "^0.2.0a4", allow-prereleases = true}
+
+
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+black = "*"
+ipython = "^8.10.0"
+django-polymorphic = "^3.1.0"
+tox = "^4.4.8"
+psycopg = "^3.1.8"
+mysqlclient = "^2.1.1"
+
+
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.2.0"
+pytest-asyncio = "^0.20.3"
+pytest-cov = {version = "^4.0.0", extras = ["toml"]}
+pytest-django = "^4.5.2"
+django-polymorphic = "^3.1.0"
+tox = "^4.4.8"
+mysqlclient = "^2.1.1"
+psycopg = "^3.1.8"
+django-environ = "^0.10.0"
+faker = "^18.6.1"
+
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "*"
+mkdocs-material = "*"
+mike = "*"
+mkdocstrings = "*"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = "True"
+
+
+[tool.pytest.ini_options]
+addopts = "--showlocals --cov=virtual_fields --cov-report html --cov-config pyproject.toml"
+asyncio_mode="auto"
+xfail_strict= "True"
+log_level = "DEBUG"
+python_files = "tests.py test.py test_*.py"
+python_classes = "test_* Test_*"
+python_functions = "test_* test"
+DJANGO_SETTINGS_MODULE = "tests.app.settings"
+
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "^\\s*pass\\s*$",
+    "^\\s*\\.\\.\\.\\s*$",
+    "raise NotImplementedError",
+    "if\\s+([a-zA-Z0-9_]+\\.)?TYPE_CHECKING\\s*:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
