@@ -52,4 +52,4 @@ celerybeat-schedule.db
 .DS_Store
 
 
-~!*
+.~!*

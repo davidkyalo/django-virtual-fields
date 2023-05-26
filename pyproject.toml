@@ -70,14 +70,15 @@ ignore_missing_imports = "True"
 
 
 [tool.pytest.ini_options]
-addopts = "--showlocals --cov=virtual_fields --cov-report html --cov-config pyproject.toml"
+addopts = "--reuse-db --showlocals --cov=virtual_fields --cov-report html --cov-config pyproject.toml"
 asyncio_mode="auto"
 xfail_strict= "True"
 log_level = "DEBUG"
 python_files = "tests.py test.py test_*.py"
 python_classes = "test_* Test_*"
 python_functions = "test_* test"
-DJANGO_SETTINGS_MODULE = "tests.app.settings"
+# DJANGO_SETTINGS_MODULE = "tests.app.settings"
+DJANGO_SETTINGS_MODULE = "examples.settings"
 
 
 [tool.coverage.report]
