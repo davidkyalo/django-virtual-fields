@@ -12,7 +12,7 @@ from examples.faker import Faker
 from virtual_fields.fields import VirtualField
 
 pytestmark = [
-    pytest.mark.django_db,
+    pytest.mark.django_db(databases=[*settings.DATABASES]),
 ]
 
 
@@ -38,11 +38,17 @@ def person_fn_fixture(ufaker: Faker, using):
     return new
 
 
-@pytest.fixture(name="vendor", scope="session", params=["sqlite", "mysql", "pgsql"])
+@pytest.fixture(name="vendor", scope="session")
 def vendor_fixture(request: pytest.FixtureRequest):
-    if (val := request.param) in settings.DATABASES_BY_VENDOR:
-        return val
-    pytest.skip(f"Database {val!r} not available")
+    return settings.DATABASE_VENDOR
+
+
+# @pytest.fixture(name="vendor", scope="session", params=["sqlite", "mysql", "pgsql"])
+# def vendor_fixture(request: pytest.FixtureRequest):
+#     if (val := request.param) in settings.DATABASES_BY_VENDOR:
+#         if val == settings.DATABASE_VENDOR:
+#             return val
+#     pytest.skip(f"Database {val!r} not available")
 
 
 @pytest.fixture(name="using")
@@ -56,8 +62,11 @@ def using_fixture(vendor):
 
 
 @pytest.fixture(name="log_file", scope="session")
-def logfile_fixture():
-    return Path(os.getcwd()) / ".~!dump.sql"
+def logfile_fixture(tox_env_name):
+    en = tox_env_name and f"-{tox_env_name}" or ""
+    dir = Path(os.getcwd()) / f".local"
+    dir.exists() or os.mkdir(dir)
+    return dir / f".~!dump{en}.sql"
 
 
 @pytest.fixture(name="log_io", scope="session")
@@ -121,7 +130,7 @@ def test_example(
     log: "Logger",
     post_fn: type[Post],
 ):
-    qs = _qs = Person.objects.using(using).all()
+    qs = _qs = Person.objects.all().using(using)
     person_fn(), person_fn()
 
     # qs = qs.filter(age__gt=2, city="Nairobi", full_name="abc").order_by("age")

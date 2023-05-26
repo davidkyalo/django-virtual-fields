@@ -1,23 +1,12 @@
 import os
 import re
 import sys
-from pathlib import Path
 
 import pytest as pyt
 
 
 def test_coverage():
     assert True
-
-
-@pyt.fixture(scope="session")
-def tox_env_name():
-    tox_env_dir = os.getenv("TOX_ENV_DIR")
-    tox_env = os.getenv("TOX_ENV_NAME")
-
-    if tox_env_dir and tox_env:
-        if sys.executable.startswith(tox_env_dir):
-            return tox_env
 
 
 @pyt.fixture()

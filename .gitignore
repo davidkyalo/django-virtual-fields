@@ -37,6 +37,7 @@ local.env
 *.pyc
 *.pyo
 *.sqlite3
+*.sqlite.db
 
 # coverage result
 .coverage

@@ -161,22 +161,31 @@ WSGI_APPLICATION = "examples.wsgi.application"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
 DATABASES_BY_VENDOR: dict = {
-    "sqlite": env.db_url_config("sqlite:////tmp/test-sqlite.db"),
-    "mysql": env.db_url_config("mysql://root:root@localhost/test_db"),
     "pgsql": env.db_url_config("postgres://root:root@localhost/test_db"),
+    "mysql": env.db_url_config("mysql://root:root@localhost/test_db"),
+    "sqlite": env.db_url_config(
+        "sqlite://db.sqlite3",
+    ),
     **env.dict("DATABASES", {"value": env.db_url_config}, {}),
 }
 DATABASE_VENDOR = env("DATABASE_VENDOR") or next(iter(DATABASES_BY_VENDOR))
-DATABASES = dict(DATABASES_BY_VENDOR)
-DATABASES["default"] = DATABASES.pop(DATABASE_VENDOR)
+DATABASES = dict(default=DATABASES_BY_VENDOR[DATABASE_VENDOR])
 
+from virtual_fields.testing import get_env_name
 
-tox_env: str | None = env("TOX_ENV_NAME", default=None)
-if tox_env:
+ENV_NAME = get_env_name().replace(f"-{DATABASE_VENDOR}", "")
+
+# DATABASES["default"]["TEST"] = {
+#     "NAME": f"test_{ENV_NAME}_{DATABASES['default']['NAME']}",
+#     **DATABASES["default"].get("TEST", {}),
+# }
+# tox_env: str | None = env("TOX_ENV_NAME", default=None)
+db: dict = DATABASES["default"]
+if en := ENV_NAME:
     for k in DATABASES_BY_VENDOR:
-        tox_env = tox_env.replace(f"-{k}", "")
-    tox_env = tox_env.strip("-_.").replace("--", "-").replace(".", "").replace("-", "_")
-    DATABASES["default"]["NAME"] = f"{DATABASES['default']['NAME']}__{tox_env}"
+        en = en.replace(f"-{k}", "")
+    en = en.strip("-_.").replace("--", "-").replace(".", "").replace("-", "_")
+    db["NAME"] = f"{en}__{db['NAME'].replace(':memory:', 'db.sqlite3')}"
 
 
 # Password validation

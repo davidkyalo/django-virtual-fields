@@ -1,8 +1,9 @@
 import typing as t
 from logging import getLogger
-from pathlib import Path
 
 import pytest
+
+from virtual_fields.testing import get_tox_env_name
 
 if t.TYPE_CHECKING:
     from examples.faker import Faker
@@ -10,9 +11,9 @@ if t.TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-from django.test import TestCase
+# from django.test import TestCase
 
-TestCase.databases = "__all__"
+# TestCase.databases = "__all__"
 
 # def pytest_configure(config: pytest.Config):
 #     nl = "\n  - "
@@ -36,6 +37,11 @@ TestCase.databases = "__all__"
 # @pytest.fixture(scope="session", autouse=True)
 # def faker_seed():
 #     return 12345
+
+
+@pytest.fixture(scope="session")
+def tox_env_name():
+    return get_tox_env_name()
 
 
 @pytest.fixture(scope="session", autouse=True)
