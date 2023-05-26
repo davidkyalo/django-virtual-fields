@@ -98,6 +98,11 @@ LOGGING = {
             "level": LOG_LEVEL,
             "propagate": True,
         },
+        "faker": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
     },
 }
 

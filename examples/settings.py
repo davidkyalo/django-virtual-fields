@@ -15,7 +15,7 @@ from pathlib import Path
 import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = (Path(__file__) / "../../../").resolve()
+BASE_DIR = (Path(__file__) / "../../").resolve()
 
 env = environ.Env(
     DEBUG=(bool, False),
@@ -103,6 +103,11 @@ LOGGING = {
             "level": LOG_LEVEL,
             "propagate": True,
         },
+        "faker": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
     },
 }
 
@@ -116,7 +121,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "polymorphic",
+    "virtual_fields",
     "examples",
+    "examples.example_01",
 ]
 
 MIDDLEWARE = [
@@ -129,7 +136,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "examples.urls"
+# ROOT_URLCONF = "examples.urls"
 
 TEMPLATES = [
     {
@@ -154,17 +161,16 @@ WSGI_APPLICATION = "examples.wsgi.application"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
 DATABASES_BY_VENDOR: dict = {
-    # "sqlite": {
-    #     "ENGINE": "django.db.backends.sqlite3",
-    #     "NAME": BASE_DIR / "db.sqlite3",
-    # },
     "sqlite": env.db_url_config("sqlite:////tmp/test-sqlite.db"),
     "mysql": env.db_url_config("mysql://root:root@localhost/test_db"),
     "pgsql": env.db_url_config("postgres://root:root@localhost/test_db"),
     **env.dict("DATABASES", {"value": env.db_url_config}, {}),
 }
 DATABASE_VENDOR = env("DATABASE_VENDOR") or next(iter(DATABASES_BY_VENDOR))
-DATABASES = dict(default=DATABASES_BY_VENDOR[DATABASE_VENDOR])
+DATABASES = dict(DATABASES_BY_VENDOR)
+DATABASES["default"] = DATABASES.pop(DATABASE_VENDOR)
+
+
 tox_env: str | None = env("TOX_ENV_NAME", default=None)
 if tox_env:
     for k in DATABASES_BY_VENDOR:

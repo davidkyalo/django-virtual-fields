@@ -1,36 +1,34 @@
 import json
 import typing as t
 from decimal import Decimal
-
-from faker import Faker
+import faker
 from faker.providers import BaseProvider
 from typing_extensions import Self
 
-if t.TYPE_CHECKING:
-    from faker.generator import Generator
-    from faker.providers import (
-        address,
-        bank,
-        date_time,
-        file,
-        internet,
-        lorem,
-        misc,
-        person,
-        python,
-    )
+from faker.generator import Generator
+from faker.providers import (
+    address,
+    bank,
+    date_time,
+    file,
+    internet,
+    lorem,
+    misc,
+    person,
+    python,
+)
 
-    TProvider = (
-        python.Provider
-        | lorem.Provider
-        | date_time.Provider
-        | internet.Provider
-        | file.Provider
-        | misc.Provider
-        | address.Provider
-        | person.Provider
-        | bank.Provider
-    )
+TProvider = (
+    python.Provider
+    | lorem.Provider
+    | date_time.Provider
+    | internet.Provider
+    | file.Provider
+    | misc.Provider
+    | address.Provider
+    | person.Provider
+    | bank.Provider
+)
 
 _JSONABLE_TYPES = bool, str, int, float, dict, tuple, list
 
@@ -77,16 +75,12 @@ class ExtraProvider(BaseProvider):
         g = self.generator
         return g.time_delta(g.date_time() if end_datetime is None else end_datetime)
 
-    # def uuid4(self):
-    #     return uuid.uuid4()
 
+Faker = Generator | ExtraProvider | TProvider
 
-if t.TYPE_CHECKING:
-    TFaker = Generator | ExtraProvider | TProvider
-
-fake: "TFaker" = Faker()
+fake: Faker = faker.Faker()
 
 fake.add_provider(ExtraProvider)
 
 
-ufake: "TFaker" = fake.unique
+ufake: Faker = fake.unique

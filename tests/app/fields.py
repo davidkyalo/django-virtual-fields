@@ -8,7 +8,7 @@ from uuid import UUID
 
 from django.apps import apps
 from django.db import models as m
-from tests.faker import ufake
+from examples.faker import ufake
 from virtual_fields.utils import JsonPrimitive
 
 
