@@ -36,6 +36,7 @@ local.env
 *.pyo
 *.pyc
 *.pyo
+*.sqlite
 *.sqlite3
 *.sqlite.db
 
