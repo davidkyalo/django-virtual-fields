@@ -10,9 +10,19 @@ from .models import Article, Comment, Person, Post
 
 @admin.register(Person)
 class PersonAdmin(admin.ModelAdmin):
-    list_display = ["id", "full_name", "city", "dob", "age", "height", "weight", "bmi"]
+    list_display = [
+        "id",
+        "full_name",
+        "city",
+        "country",
+        "dob",
+        "age",
+        "height",
+        "weight",
+        "bmi",
+    ]
 
-    search_fields = ["full_name", "city"]
+    search_fields = ["full_name", "city", "bmi"]
 
     readonly_fields = [
         "id",
@@ -30,6 +40,7 @@ class PersonAdmin(admin.ModelAdmin):
         "name",
         "dob",
         "age",
+        "country",
         "city",
         "height",
         "weight",
@@ -41,8 +52,8 @@ class PostAdmin(admin.ModelAdmin):
     list_display = [
         "id",
         "title",
-        "content",
         "author",
+        "author_name",
         "published_at",
         "created_at",
         "parent",
@@ -62,3 +73,7 @@ class ArticleAdmin(PostAdmin):
 @admin.register(Comment)
 class CommentAdmin(PostAdmin):
     pass
+
+
+# [Person.create() for _ in range(20)]
+# [Post.create() for _ in range(200)]

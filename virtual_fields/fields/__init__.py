@@ -1,15 +1,30 @@
+from functools import reduce
 from logging import getLogger
-from typing import overload
+from operator import methodcaller, or_
+from threading import RLock
+from types import GenericAlias, new_class
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Final,
+    Generic,
+    TypeVar,
+    get_origin,
+    overload,
+)
+from weakref import WeakKeyDictionary
 
 from django.db import models as m
 from django.db.models.query_utils import DeferredAttribute
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
+from typing_extensions import Self
 
 __all__ = [
     "VirtualField",
 ]
 
+_T_Field = TypeVar("_T_Field", bound=m.Field, covariant=True)
 
 logger = getLogger(__name__)
 
@@ -26,23 +41,104 @@ class VirtualFieldDescriptor(DeferredAttribute):
         return val
 
 
-class VirtualField(m.Field):
+class VirtualField(m.Field, Generic[_T_Field]):
     description = _("A virtual field. Uses query annotations to return computed value.")
-    expression: m.expressions.Combinable | m.Q | str
-    output_field: m.Field = None
+    expressions: m.expressions.Combinable | m.Q | str
     defer: bool = False
-
+    model: m.Model
     descriptor_class = VirtualFieldDescriptor
+    __output_typed_: Final = {}
+    __out_lock: Final = RLock()
 
-    _field_init_default_ = {
+    _output_types_default_kwargs_ = {
+        m.CharField: {
+            "max_length": 255,
+        },
+        m.ForeignKey: {
+            "on_delete": lambda: m.DO_NOTHING,
+        },
+    }
+    _output_type_: Final = None
+    _output_args_: ClassVar = None
+    _output_kwargs_: ClassVar = None
+    _init_defaults_ = {
         "editable": False,
         "serialize": False,
     }
+    _base_field_kwargs_ = (
+        "verbose_name",
+        "name",
+        "primary_key",
+        "max_length",
+        "unique",
+        "blank",
+        "null",
+        "db_index",
+        "rel",
+        "default",
+        "editable",
+        "serialize",
+        "unique_for_date",
+        "unique_for_month",
+        "unique_for_year",
+        "choices",
+        "help_text",
+        "db_column",
+        "db_tablespace",
+        "auto_created",
+        "validators",
+        "error_messages",
+        "db_comment",
+    )
+
+    def __class_getitem__(cls, params):
+        out: type[_T_Field] = params[0] if isinstance(params, (tuple, list)) else params
+        out, base, final = get_origin(out) or out, cls._output_type_, cls
+
+        if base is None and isinstance(out, type) and issubclass(out, m.Field):
+            assert base is None or issubclass(
+                out, base
+            ), f"must be a subtype of {base.__name__}"
+            cache = cls.__output_typed_
+            if (final := cache.get(out)) is None:
+                with cls.__out_lock:
+                    if (final := cache.get(out)) is None:
+                        name = f"{out.__name__.replace('Field', '')}{cls.__name__}"
+                        module, qualname = cls.__module__, f"{cls.__qualname__}.{name}"
+                        by_typ = cls._output_types_default_kwargs_
+                        kwds = reduce(
+                            or_,
+                            filter(None, map(by_typ.get, out.__mro__[::-1])),
+                            cls._output_kwargs_ or {},
+                        )
+                        cache[out] = final = new_class(
+                            name,
+                            (cls[_T_Field],),
+                            None,
+                            methodcaller(
+                                "update",
+                                {
+                                    "__module__": module,
+                                    "__qualname__": qualname,
+                                    "_output_type_": out,
+                                    "_output_field_kwargs_": kwds,
+                                },
+                            ),
+                        )
+        return super(cls, final).__class_getitem__(params)
+
+    if not TYPE_CHECKING:
+
+        def __new__(cls: type[Self], *a, output_field=None, **kw):
+            if output_field is not None is cls._output_type_:
+                cls = cls[output_field.__class__]
+            self = object.__new__(cls)
+            return self
 
     @overload
     def __init__(
         self,
-        expressions: m.expressions.Combinable | m.Q | str = None,
+        *expressions: m.expressions.Combinable | m.Q | str,
         output_field: m.Field = None,
         defer: bool | None = None,
         verbose_name: str = None,
@@ -68,53 +164,71 @@ class VirtualField(m.Field):
 
     def __init__(
         self,
-        expression: m.expressions.Combinable | m.Q | str = None,
+        *expressions: m.expressions.Combinable | m.Q | str,
         output_field=None,
         defer: bool = None,
         db_cast: bool = None,
         **kwargs,
     ):
-        self.expression = expression
-        self.output_field = output_field
+        self.expressions = expressions
         self.defer, self.db_cast = defer, db_cast
-        super().__init__(**self._field_init_default_ | kwargs)
+        kwargs, bfk = self._init_defaults_ | kwargs, self._base_field_kwargs_
+        super().__init__(**{k: v for k, v in kwargs.items() if k in bfk})
+        if output_field is None and self._output_type_:
+            kwargs = (self._output_kwargs_ or {}) | kwargs
+            output_field = self._output_type_(**kwargs)
+        self.output_candidate = output_field
+
+    @cached_property
+    def output_field(self) -> _T_Field:
+        return self.final_expression.output_field
 
     @cached_property
     def empty_strings_allowed(self):
         return o.empty_strings_allowed if (o := self.output_field) else False
 
-    @property
-    def _model_name(self):
-        vals = []
-        if hasattr(self, "model"):
-            vals.append(self.model._meta.model_name)
-
-        if hasattr(self, "attname"):
-            vals.append(self.attname)
-
-        return ".".join(vals)
-
     @cached_property
     def final_expression(self):
-        if isinstance(expr := self.expression, str):
+        (expr, *extra), out = self._get_expressions(), self.output_candidate
+        self.has_default() and extra.append(m.Value(self.get_default()))
+
+        if extra:
+            expr = m.functions.Coalesce(expr, *extra, output_field=out)
+        elif isinstance(expr, str):
             expr = m.F(f"{expr}")
 
-        out = self.output_field
         if self.db_cast:
+            assert out is not None, f""
             expr = m.functions.Cast(expr, out)
         else:
-            expr = m.ExpressionWrapper(expr, self.output_field)
+            expr = m.ExpressionWrapper(expr, out)
         expr.target = self
         return expr
+
+    @cached_property
+    def cached_col(self):
+        model = self.model
+        name, qs = self.name, m.QuerySet(model=model)
+        qs._fields = {f.name for f in model._meta.get_fields() if f.name != name}
+        qs = qs.annotate(**{name: self.final_expression})
+        rv = qs.query.annotations[name]
+        return rv
+
+    def _get_expressions(self):
+        return (e(self.model) if callable(e) else e for e in self.expressions)
 
     def get_internal_type(self):
         return "VirtualField"
 
     def db_type(self, connection):
+        # TODO: Remove this. Not getting called
         return None
 
     def select_format(self, compiler, sql, params):
-        """
+        """GETS CALLED TO RESOLVE RELATED
+        TODO: Remove this and implement an Expression.
+              Check `resolve_expression` and `as_sql` on `BaseExpression`
+
         Custom format for select clauses. For example, GIS columns need to be
         selected as AsText(table.col) on MySQL as the table.col data can't be
         used by Django.
@@ -122,26 +236,17 @@ class VirtualField(m.Field):
         _sql, _params = super().select_format(compiler, sql, params)
         return _sql, _params
 
-    def validate(self, value, model_instance):
-        super().validate(value, model_instance)
-        if field := self.output_field:
-            return field.validate(value, model_instance)
+    def clean(self, value, model_instance):
+        return self.output_field.clean(
+            super().clean(value, model_instance), model_instance
+        )
 
     def formfield(self, **kwargs):
-        if field := self.output_field:
-            return field.formfield(**kwargs)
+        return self.output_field.formfield(**kwargs)
 
     def contribute_to_class(self, cls, name, private_only=None):
         super().contribute_to_class(cls, name, private_only is not False)
         setattr(cls, self.attname, self.descriptor_class(self))
-
-    @cached_property
-    def cached_col(self):
-        name, qs = self.name, m.QuerySet(model=self.model)
-        qs._fields = {f.name for f in self.model._meta.fields if f.name != name}
-        qs = qs.annotate(**{name: self.final_expression})
-        rv = qs.query.annotations[name]
-        return rv
 
     def get_attname_column(self):
         """Sets column to `None` for deferred fields to prevent selection."""
