@@ -11,7 +11,6 @@ concurrency:
 jobs:
   test:
     name: Run Tests
-    if: github.ref == 'xxx'
     runs-on: ${{ matrix.platform }}
     strategy:
       matrix:
@@ -25,7 +24,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Set up PostgreSQL
         uses: harmon758/postgresql-action@v1
-        if: matrix.platform == 'ubuntu-latest'
+        # if: matrix.platform == 'ubuntu-latest'
         with:
             postgresql version: '12.14'
             postgresql user: 'root' 
@@ -41,6 +40,7 @@ jobs:
         run: tox p -- --cov-append --cov-report xml
         env:
             PLATFORM: ${{ matrix.platform }}
+            TOX_SKIP_ENV: .*(darwin|win32).*-mysql.*
             DATABASES: mysql=mysql://root:root@localhost/test_db;pgsql=postgres://root:root@localhost/test_db;sqlite=sqlite:////tmp/test-sqlite.db
       - name: Upload code coverage
         if: matrix.platform == 'ubuntu-latest'
