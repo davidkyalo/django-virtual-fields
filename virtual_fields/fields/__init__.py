@@ -1,5 +1,5 @@
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Optional, overload
+from typing import overload
 
 from django.db import models as m
 from django.db.models.query_utils import DeferredAttribute

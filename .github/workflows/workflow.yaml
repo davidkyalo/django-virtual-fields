@@ -53,7 +53,7 @@ jobs:
             fail_ci_if_error: true
   version-check:
     name: Check Version Bump
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'xxx'
     runs-on: ubuntu-latest
     defaults:
       run:
