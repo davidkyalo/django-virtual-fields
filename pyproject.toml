@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "Django-Virtual-Fields"
-version = "0.0.0a0"
+version = "0.0.0a1"
 description = "Virtual `django` fields."
 authors = ["David Kyalo <davidmkyalo@gmail.com>"]
 license = "MIT"
