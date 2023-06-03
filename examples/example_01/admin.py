@@ -14,12 +14,13 @@ class PersonAdmin(admin.ModelAdmin):
         "id",
         "full_name",
         "city",
-        "country",
+        # "country",
         "dob",
         "age",
         "height",
         "weight",
         "bmi",
+        "bmi_cat",
     ]
 
     search_fields = ["full_name", "city", "bmi"]

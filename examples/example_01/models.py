@@ -50,15 +50,25 @@ class Person(m.Model):
         KT("data__country"), default=ufaker.country, editable=True
     )
     city = VirtualField[m.CharField](KT("data__city"), editable=True)
-    height = VirtualField[m.FloatField](KT("data__height"), db_cast=True)
+    height = VirtualField[m.DecimalField](
+        KT("data__height"), decimal_places=2, max_digits=8, db_cast=True
+    )
     weight = VirtualField[m.IntegerField]("data__weight", db_cast=True)
-
     bmi = VirtualField[m.DecimalField](
         m.F("weight") / m.functions.Power(m.F("height"), 2),
         max_digits=12,
         decimal_places=3,
         db_cast=True,
         verbose_name="body mass index",
+    )
+
+    bmi_cat = VirtualField(
+        m.Case(
+            m.When(bmi__lt=18.5, then=m.Value("Underweight")),
+            m.When(bmi__lt=25, then=m.Value("Normal weight")),
+            m.When(bmi__lt=30, then=m.Value("Overweight")),
+            default=m.Value("Obesity"),
+        )
     )
 
     posts: "m.manager.RelatedManager[Post]"

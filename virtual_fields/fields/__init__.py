@@ -225,9 +225,10 @@ class VirtualField(m.Field, Generic[_T_Field]):
         return None
 
     def select_format(self, compiler, sql, params):
-        """GETS CALLED TO RESOLVE RELATED
+        """
         TODO: Remove this and implement an Expression.
               Check `resolve_expression` and `as_sql` on `BaseExpression`
+            EDIT: GETS CALLED TO RESOLVE RELATED
 
         Custom format for select clauses. For example, GIS columns need to be
         selected as AsText(table.col) on MySQL as the table.col data can't be
