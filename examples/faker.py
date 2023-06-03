@@ -1,12 +1,11 @@
 import json
 import typing as t
 from decimal import Decimal
-import faker
-from faker.providers import BaseProvider
-from typing_extensions import Self
 
+import faker as fk
 from faker.generator import Generator
 from faker.providers import (
+    BaseProvider,
     address,
     bank,
     date_time,
@@ -17,6 +16,7 @@ from faker.providers import (
     person,
     python,
 )
+from typing_extensions import Self
 
 TProvider = (
     python.Provider
@@ -78,9 +78,9 @@ class ExtraProvider(BaseProvider):
 
 Faker = Generator | ExtraProvider | TProvider
 
-fake: Faker = faker.Faker()
+faker: Faker = fk.Faker()
 
-fake.add_provider(ExtraProvider)
+faker.add_provider(ExtraProvider)
 
 
-ufake: Faker = fake.unique
+ufaker: Faker = faker.unique

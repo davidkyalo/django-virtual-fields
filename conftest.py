@@ -63,3 +63,22 @@ def faker(faker: "Faker", _session_faker):
 @pytest.fixture()
 def ufaker(faker: "Faker"):
     return faker.unique
+
+
+@pytest.fixture(name="vendor", scope="session")
+def vendor_fixture(request: pytest.FixtureRequest):
+    from django.conf import settings
+
+    return settings.DATABASE_VENDOR
+
+
+@pytest.fixture(name="using")
+def using_fixture(vendor):
+    from django.conf import settings
+
+    if vendor in settings.DATABASES:
+        return vendor
+    elif vendor == settings.DATABASE_VENDOR:
+        return "default"
+
+    pytest.skip(f"Database {vendor!r} not enabled.")

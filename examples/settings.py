@@ -14,6 +14,14 @@ from pathlib import Path
 
 import environ
 
+try:
+    import debug_toolbar  # type: ignore
+except ImportError:
+    debug_toolbar = None
+else:
+    debug_toolbar = True
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = (Path(__file__) / "../../").resolve()
 
@@ -35,8 +43,16 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = ["*"]
 
+INTERNAL_IPS = [
+    # ...
+    "127.0.0.1",
+    # ...
+]
 
-LOG_LEVEL = "DEBUG"
+RESULTS_CACHE_SIZE = 50
+SHOW_COLLAPSED = True
+
+LOG_LEVEL = "INFO"
 
 LOGGING = {
     "version": 1,
@@ -95,7 +111,7 @@ LOGGING = {
         },
         "virtual_fields": {
             "handlers": ["console", "mail_admins"],
-            "level": LOG_LEVEL,
+            "level": "DEBUG",
             "propagate": True,
         },
         "examples": {
@@ -121,12 +137,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "polymorphic",
+    *(["debug_toolbar"] if debug_toolbar else []),
     "virtual_fields",
     "examples",
     "examples.example_01",
 ]
 
 MIDDLEWARE = [
+    *(["debug_toolbar.middleware.DebugToolbarMiddleware"] if debug_toolbar else []),
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -163,9 +181,7 @@ WSGI_APPLICATION = "examples.wsgi.application"
 DATABASES_BY_VENDOR: dict = {
     "pgsql": env.db_url_config("postgres://root:root@localhost/test_db"),
     "mysql": env.db_url_config("mysql://root:root@localhost/test_db"),
-    "sqlite": env.db_url_config(
-        "sqlite://db.sqlite3",
-    ),
+    "sqlite": env.db_url_config(f"sqlite:///test_db.sqlite"),
     **env.dict("DATABASES", {"value": env.db_url_config}, {}),
 }
 DATABASE_VENDOR = env("DATABASE_VENDOR") or next(iter(DATABASES_BY_VENDOR))
@@ -173,19 +189,16 @@ DATABASES = dict(default=DATABASES_BY_VENDOR[DATABASE_VENDOR])
 
 from virtual_fields.testing import get_env_name
 
-ENV_NAME = get_env_name().replace(f"-{DATABASE_VENDOR}", "")
+ENV_NAME = get_env_name("").replace(f"-{DATABASE_VENDOR}", "")
 
-# DATABASES["default"]["TEST"] = {
-#     "NAME": f"test_{ENV_NAME}_{DATABASES['default']['NAME']}",
-#     **DATABASES["default"].get("TEST", {}),
-# }
-# tox_env: str | None = env("TOX_ENV_NAME", default=None)
+
 db: dict = DATABASES["default"]
 if en := ENV_NAME:
     for k in DATABASES_BY_VENDOR:
         en = en.replace(f"-{k}", "")
-    en = en.strip("-_.").replace("--", "-").replace(".", "").replace("-", "_")
-    db["NAME"] = f"{en}__{db['NAME'].replace(':memory:', 'db.sqlite3')}"
+    if en := en.strip("-_.").replace("--", "-").replace(".", "").replace("-", "_"):
+        db["NAME"] = f"{en}__{db['NAME']}"
+del db, en
 
 
 # Password validation
@@ -212,7 +225,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Africa/Nairobi"
 
 USE_I18N = True
 
@@ -228,3 +241,5 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+ROOT_URLCONF = "examples.urls"

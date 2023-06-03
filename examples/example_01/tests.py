@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 from django.conf import settings
+from django.db import models as m
+from django.db.models.functions import Concat
 from django.utils import timezone
 
 from examples.example_01.models import Person, Post
@@ -17,9 +19,9 @@ pytestmark = [
 
 
 @pytest.fixture(name="person_fn")
-def person_fn_fixture(ufaker: Faker, using):
+def person_fn_fixture(ufaker: Faker):
     def new(qs=Person.objects.all(), /, *, data=None, **kw):
-        return qs.using(using).create(
+        return qs.create(
             **{
                 "first_name": ufaker.first_name(),
                 "last_name": ufaker.last_name(),
@@ -27,7 +29,6 @@ def person_fn_fixture(ufaker: Faker, using):
                 "data": {
                     "city": ufaker.city(),
                     "height": ufaker.pyfloat(None, 3, True, 1, 3),
-                    # "height": ufaker.pydecimal(None, 3, True, 1, 3),
                     "weight": ufaker.pyint(40, 120, 5),
                     **(data or {}),
                 },
@@ -38,27 +39,50 @@ def person_fn_fixture(ufaker: Faker, using):
     return new
 
 
-@pytest.fixture(name="vendor", scope="session")
-def vendor_fixture(request: pytest.FixtureRequest):
-    return settings.DATABASE_VENDOR
+@pytest.fixture(name="post_fn")
+def post_fn_fixture(ufaker: Faker, person_fn):
+    def new(qs=None, /, *, author=None, data=None, **kw):
+        if qs is None:
+            qs = Post.objects.all()
+            if not any(k in kw for k in ("author", "author_id")):
+                qs = (Person.objects.order_by().last() or person_fn()).posts
+
+        return qs.create(
+            **{
+                "title": ufaker.sentence(ufaker.random_int(3, 6))[:255],
+                "content": "\n\n".join(
+                    ufaker.paragraph(ufaker.random_int(3, 6))
+                    for _ in range(ufaker.random_int(2, 10))
+                ),
+                "published_at": ufaker.date_time_this_year(),
+                **kw,
+            }
+        )
+
+    return new
 
 
-# @pytest.fixture(name="vendor", scope="session", params=["sqlite", "mysql", "pgsql"])
-# def vendor_fixture(request: pytest.FixtureRequest):
-#     if (val := request.param) in settings.DATABASES_BY_VENDOR:
-#         if val == settings.DATABASE_VENDOR:
-#             return val
-#     pytest.skip(f"Database {val!r} not available")
+def test_example(
+    ufaker: Faker,
+    person_fn: type[Person],
+    log: "Logger",
+    post_fn: type[Post],
+):
+    qs = _qs = Person.objects.all()
+    obj_0, obj_1 = person_fn(), person_fn()
+    qs = (
+        qs
+        # .defer("age")
+        .exclude(full_name="abc.xyz").filter(age__gt=0)
+    )
+    # qs = qs.filter(age__gt=2, city="Nairobi", full_name="abc").order_by("age")
+    sql = qs.query
+    print(f"SQL:       --> {sql}")
+    print(f"EXPLAINED: --> {qs.explain()}")
 
-
-@pytest.fixture(name="using")
-def using_fixture(vendor):
-    if vendor in settings.DATABASES:
-        return vendor
-    elif vendor == settings.DATABASE_VENDOR:
-        return "default"
-
-    pytest.skip(f"Database {vendor!r} not enabled.")
+    # log.block(settings.DATABASE_VENDOR)
+    # log.dump(f"{sql};")
+    assert {*qs} == {obj_0, obj_1}
 
 
 @pytest.fixture(name="log_file", scope="session")
@@ -95,54 +119,6 @@ def log_fixture(log_io: Path, vendor: str):
         ),
     )
     return log
-
-
-@pytest.fixture(name="post_fn")
-def post_fn_fixture(ufaker: Faker, using, person_fn):
-    def new(qs=None, /, *, author=None, data=None, **kw):
-        if qs is None:
-            qs = Post.objects.all()
-            if not any(k in kw for k in ("author", "author_id")):
-                qs = (
-                    Person.objects.using(using).order_by().last() or person_fn()
-                ).posts
-
-        return qs.using(using).create(
-            **{
-                "title": ufaker.sentence(ufaker.random_int(3, 6))[:255],
-                "content": "\n\n".join(
-                    ufaker.paragraph(ufaker.random_int(3, 6))
-                    for _ in range(ufaker.random_int(2, 10))
-                ),
-                "published_at": ufaker.date_time_this_year(),
-                **kw,
-            }
-        )
-
-    return new
-
-
-def test_example(
-    ufaker: Faker,
-    person_fn: type[Person],
-    using: str,
-    vendor: str,
-    log: "Logger",
-    post_fn: type[Post],
-):
-    qs = _qs = Person.objects.all().using(using)
-    person_fn(), person_fn()
-
-    # qs = qs.filter(age__gt=2, city="Nairobi", full_name="abc").order_by("age")
-    sql = _qs.query
-    print(f"SQL: --> {sql}")
-
-    log.block(vendor)
-    log.dump(f"{sql};")
-
-    pprint([*_qs], depth=9, indent=4)
-
-    # assert 0
 
 
 class Logger(SimpleNamespace):

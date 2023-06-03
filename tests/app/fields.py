@@ -8,9 +8,9 @@ from uuid import UUID
 
 from django.apps import apps
 from django.db import models as m
-from examples.faker import ufake
-from virtual_fields.utils import JsonPrimitive
 
+from examples.faker import ufaker
+from virtual_fields.utils import JsonPrimitive
 
 _FT = t.TypeVar("_FT", bound=m.Field)
 _T = t.TypeVar("_T")
@@ -19,30 +19,30 @@ _notset = object()
 
 
 FIELD_FACTORIES = {
-    m.BooleanField: ufake.pybool,
-    m.CharField: ufake.pystr,
-    m.EmailField: ufake.email,
-    m.SlugField: ufake.slug,
-    m.TextField: ufake.text,
-    m.URLField: ufake.url,
-    m.BinaryField: ufake.memoryview,
-    m.GenericIPAddressField: ufake.ipv6,
-    m.DateField: ufake.date_object,
-    m.DateTimeField: ufake.date_time,
-    m.DurationField: ufake.rand_timedelta,
-    m.TimeField: ufake.time_object,
-    m.FilePathField: ufake.file_path,
-    m.DecimalField: ufake.fixed_decimal,
-    m.FloatField: ufake.pyfloat,
-    m.IntegerField: ufake.pyint,
-    m.BigIntegerField: partial(ufake.pyint, int(3e9), int(sys.maxsize * 0.7)),
-    m.PositiveBigIntegerField: partial(ufake.pyint, int(3e9), int(sys.maxsize * 0.7)),
-    m.SmallIntegerField: partial(ufake.pyint, 0, 9999),
-    m.PositiveSmallIntegerField: partial(ufake.pyint, 0, 9999),
-    m.PositiveIntegerField: ufake.pyint,
-    m.UUIDField: partial(ufake.uuid4, cast_to=None),
-    m.JSONField: ufake.json_dict,
-    m.FileField: ufake.file_path,
+    m.BooleanField: ufaker.pybool,
+    m.CharField: ufaker.pystr,
+    m.EmailField: ufaker.email,
+    m.SlugField: ufaker.slug,
+    m.TextField: ufaker.text,
+    m.URLField: ufaker.url,
+    m.BinaryField: ufaker.memoryview,
+    m.GenericIPAddressField: ufaker.ipv6,
+    m.DateField: ufaker.date_object,
+    m.DateTimeField: ufaker.date_time,
+    m.DurationField: ufaker.rand_timedelta,
+    m.TimeField: ufaker.time_object,
+    m.FilePathField: ufaker.file_path,
+    m.DecimalField: ufaker.fixed_decimal,
+    m.FloatField: ufaker.pyfloat,
+    m.IntegerField: ufaker.pyint,
+    m.BigIntegerField: partial(ufaker.pyint, int(3e9), int(sys.maxsize * 0.7)),
+    m.PositiveBigIntegerField: partial(ufaker.pyint, int(3e9), int(sys.maxsize * 0.7)),
+    m.SmallIntegerField: partial(ufaker.pyint, 0, 9999),
+    m.PositiveSmallIntegerField: partial(ufaker.pyint, 0, 9999),
+    m.PositiveIntegerField: ufaker.pyint,
+    m.UUIDField: partial(ufaker.uuid4, cast_to=None),
+    m.JSONField: ufaker.json_dict,
+    m.FileField: ufaker.file_path,
     # m.ImageField: lambda:None,
     m.ForeignKey: lambda: None,
     m.OneToOneField: lambda: None,
