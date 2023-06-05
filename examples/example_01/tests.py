@@ -62,7 +62,6 @@ def post_fn_fixture(ufaker: Faker, person_fn):
 def test_example(
     ufaker: Faker,
     person_fn: type[Person],
-    log: "Logger",
     post_fn: type[Post],
 ):
     qs = _qs = Person.objects.all()
