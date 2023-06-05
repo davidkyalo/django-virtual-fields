@@ -72,8 +72,9 @@ class Person(m.Model):
         defer=True,
     )
 
+    likes = VirtualField[m.IntegerField](m.Count("liked"))
     posts: "m.manager.RelatedManager[Post]"
-    likes: "m.manager.RelatedManager[Post]"
+    liked: "m.manager.RelatedManager[Post]"
 
     class Meta:
         pass
@@ -123,7 +124,7 @@ class PostType(m.TextChoices):
 
 class PostManager(m.Manager):
     def get_queryset(self) -> QuerySet:
-        return super().get_queryset().select_related("parent", "author")
+        return super().get_queryset().select_related("author")
 
 
 class Post(m.Model):
@@ -144,14 +145,15 @@ class Post(m.Model):
 
     children: "m.manager.RelatedManager[Post]"
 
-    author_name = VirtualField[m.CharField](
-        lambda c: m.Subquery(
-            Person.objects.filter(pk=m.OuterRef("author_id")).values_list(
-                "full_name", flat=True
-            )[:1]
-        ),
-        defer=True,
-    )
+    authored_by = VirtualField[m.CharField]("author__full_name")
+
+    # @authored_by.expression
+    # def authored_by_expr(cls):
+    #     return m.Subquery(
+    #         Person.objects.filter(pk=m.OuterRef("author_id")).values_list(
+    #             "full_name", flat=True
+    #         )[:1]
+    #     )
 
     @classmethod
     def create(cls, qs=None, /, type: PostType = None, **kw):

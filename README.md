@@ -7,7 +7,16 @@
 [![Coverage status][codecov-image]][codecov-link]
 
 
-A Django tool kit
+
+Define fields form computed database expressions.
+
+## Features
+ 
+- Full query support 
+- Admin support.
+- Forms support.
+- Relations
+
 
 
 

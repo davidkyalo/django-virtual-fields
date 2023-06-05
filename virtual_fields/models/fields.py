@@ -1,3 +1,4 @@
+from collections import abc
 from functools import reduce
 from logging import getLogger
 from operator import methodcaller, or_
@@ -29,19 +30,23 @@ __all__ = [
 
 _T_Field = TypeVar("_T_Field", bound=m.Field, covariant=True)
 _T_Model = TypeVar("_T_Model", bound="Model", covariant=True)
-
+_T_Fn = abc.Callable[..., Any]
 logger = getLogger(__name__)
 
 
 class VirtualFieldDescriptor(DeferredAttribute):
     field: "VirtualField"
 
-    def _check_parent_chain(self, instance: _T_Model):
-        if (
-            val := super()._check_parent_chain(instance)
-        ) is None and not instance._state.adding:
-            qs: m.QuerySet = instance.__class__._default_manager
-            val = qs.values_list(self.field.attname, flat=True).get(pk=instance.pk)
+    # def __get__(self, obj: _T_Model, typ=None):
+    #     return
+
+    # def __set__(self, obj: _T_Model, val):
+    #     return
+
+    def _check_parent_chain(self, obj: _T_Model):
+        if (val := super()._check_parent_chain(obj)) is None and not obj._state.adding:
+            qs: m.QuerySet = obj.__class__._default_manager
+            val = qs.values_list(self.field.attname, flat=True).get(pk=obj.pk)
         return val
 
 
@@ -49,8 +54,12 @@ class VirtualField(m.Field, Generic[_T_Field]):
     description = _("A virtual field. Uses query annotations to return computed value.")
     expressions: m.expressions.Combinable | m.Q | str
     defer: bool = False
+    cache: bool | None
     model: m.Model
     descriptor_class = VirtualFieldDescriptor
+    fget: _T_Fn | None
+    fset: _T_Fn | None
+    fdel: _T_Fn | None
     is_virtual: bool = True
     __output_typed_: Final = {}
     __out_lock: Final = RLock()
@@ -143,9 +152,10 @@ class VirtualField(m.Field, Generic[_T_Field]):
     @overload
     def __init__(
         self,
-        *expressions: m.expressions.Combinable | m.Q | str,
+        *expressions: _T_Fn | m.expressions.Combinable | m.Q | str,
         output_field: _T_Field = None,
         defer: bool | None = None,
+        cache: bool | None = None,
         verbose_name: str = None,
         name: str = None,
         max_length: int = None,
@@ -164,6 +174,9 @@ class VirtualField(m.Field, Generic[_T_Field]):
         help_text="",
         validators=(),
         error_messages=None,
+        fget: _T_Fn = None,
+        fset: _T_Fn = None,
+        fdel: _T_Fn = None,
     ):
         ...
 
@@ -172,13 +185,18 @@ class VirtualField(m.Field, Generic[_T_Field]):
         *expressions: m.expressions.Combinable | m.Q | str,
         output_field=None,
         defer: bool = None,
+        cache: bool | None = None,
         db_cast: bool = None,
+        fget: _T_Fn = None,
+        fset: _T_Fn = None,
+        fdel: _T_Fn = None,
         **kwargs,
     ):
         self.expressions = expressions
         self.defer, self.db_cast = defer, db_cast
         kwargs, bfk = self._init_defaults_ | kwargs, self._base_field_kwargs_
         super().__init__(**{k: v for k, v in kwargs.items() if k in bfk})
+        self.fget, self.fset, self.fdel, self.cache = fget, fset, fdel, cache
         if output_field is None and self._output_type_:
             kwargs = (self._output_kwargs_ or {}) | kwargs
             output_field = self._output_type_(**kwargs)
@@ -213,11 +231,52 @@ class VirtualField(m.Field, Generic[_T_Field]):
     @cached_property
     def cached_col(self):
         model = self.model
-        name, qs = self.name, m.QuerySet(model=model)
+        name, qs = self.name, m.QuerySet(model=model).select_related()
         qs._fields = {f.name for f in model._meta.get_fields() if f.name != name}
         qs = qs.annotate(**{name: self.final_expression})
         rv = qs.query.annotations[name]
         return rv
+
+    def get_col(self, alias, output_field=None):
+        return self.cached_col
+
+    @property
+    def is_deferred(self) -> bool:
+        return self.fget is not None if (rv := self.defer) is None else rv
+
+    @property
+    def is_cached(self) -> bool:
+        return (
+            rv
+            if (rv := self.cache) is not None
+            else self.fget is None
+            if self.is_deferred
+            else False
+        )
+
+    def getter(self, func: _T_Fn = None):
+        def decorator(fn):
+            self.fget = fn
+
+        return decorator if func is None else decorator(func)
+
+    def setter(self, func: _T_Fn = None):
+        def decorator(fn):
+            self.fset = fn
+
+        return decorator if func is None else decorator(func)
+
+    def deleter(self, func: _T_Fn = None):
+        def decorator(fn):
+            self.fdel = fn
+
+        return decorator if func is None else decorator(func)
+
+    def expression(self, func: _T_Fn = None):
+        def decorator(fn):
+            self.expressions = (fn,)
+
+        return decorator if func is None else decorator(func)
 
     def _get_expressions(self):
         return (e(self.model) if callable(e) else e for e in self.expressions)
@@ -255,4 +314,4 @@ class VirtualField(m.Field, Generic[_T_Field]):
     def get_attname_column(self):
         """Sets column to `None` for deferred fields to prevent selection."""
         attname, column = super().get_attname_column()
-        return attname, None if self.defer else column
+        return attname, None if self.is_deferred else column
