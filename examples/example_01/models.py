@@ -12,7 +12,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 
 from examples.faker import faker, ufaker
-from virtual_fields.fields import VirtualField
+from virtual_fields.models import VirtualField
 
 if t.TYPE_CHECKING:
     from typing_extensions import Self
@@ -68,7 +68,8 @@ class Person(m.Model):
             m.When(bmi__lt=25, then=m.Value("Normal weight")),
             m.When(bmi__lt=30, then=m.Value("Overweight")),
             default=m.Value("Obesity"),
-        )
+        ),
+        defer=True,
     )
 
     posts: "m.manager.RelatedManager[Post]"

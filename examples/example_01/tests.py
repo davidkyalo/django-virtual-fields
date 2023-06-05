@@ -1,17 +1,14 @@
 import os
 from pathlib import Path
-from pprint import pprint
 from types import SimpleNamespace
 
 import pytest
 from django.conf import settings
-from django.db import models as m
-from django.db.models.functions import Concat
 from django.utils import timezone
 
 from examples.example_01.models import Person, Post
 from examples.faker import Faker
-from virtual_fields.fields import VirtualField
+from virtual_fields.models import VirtualField
 
 pytestmark = [
     pytest.mark.django_db(databases=[*settings.DATABASES]),

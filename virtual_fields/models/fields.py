@@ -2,9 +2,10 @@ from functools import reduce
 from logging import getLogger
 from operator import methodcaller, or_
 from threading import RLock
-from types import GenericAlias, new_class
+from types import new_class
 from typing import (
     TYPE_CHECKING,
+    Any,
     ClassVar,
     Final,
     Generic,
@@ -12,7 +13,6 @@ from typing import (
     get_origin,
     overload,
 )
-from weakref import WeakKeyDictionary
 
 from django.db import models as m
 from django.db.models.query_utils import DeferredAttribute
@@ -20,11 +20,15 @@ from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 from typing_extensions import Self
 
+if TYPE_CHECKING:
+    from ._compat import Model
+
 __all__ = [
     "VirtualField",
 ]
 
 _T_Field = TypeVar("_T_Field", bound=m.Field, covariant=True)
+_T_Model = TypeVar("_T_Model", bound="Model", covariant=True)
 
 logger = getLogger(__name__)
 
@@ -32,7 +36,7 @@ logger = getLogger(__name__)
 class VirtualFieldDescriptor(DeferredAttribute):
     field: "VirtualField"
 
-    def _check_parent_chain(self, instance: m.Model):
+    def _check_parent_chain(self, instance: _T_Model):
         if (
             val := super()._check_parent_chain(instance)
         ) is None and not instance._state.adding:
@@ -47,6 +51,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
     defer: bool = False
     model: m.Model
     descriptor_class = VirtualFieldDescriptor
+    is_virtual: bool = True
     __output_typed_: Final = {}
     __out_lock: Final = RLock()
 
@@ -139,7 +144,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
     def __init__(
         self,
         *expressions: m.expressions.Combinable | m.Q | str,
-        output_field: m.Field = None,
+        output_field: _T_Field = None,
         defer: bool | None = None,
         verbose_name: str = None,
         name: str = None,
@@ -238,9 +243,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
         return _sql, _params
 
     def clean(self, value, model_instance):
-        return self.output_field.clean(
-            super().clean(value, model_instance), model_instance
-        )
+        return self.output_field.clean(value, model_instance)
 
     def formfield(self, **kwargs):
         return self.output_field.formfield(**kwargs)

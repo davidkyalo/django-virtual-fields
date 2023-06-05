@@ -32,13 +32,15 @@ class PersonAdmin(admin.ModelAdmin):
         "name",
         "height",
         "weight",
+        "data",
         "bmi",
+        "bmi_cat",
     ]
     fields = [
         "id",
         "first_name",
         "last_name",
-        "name",
+        "data",
         "dob",
         "age",
         "country",
@@ -46,7 +48,12 @@ class PersonAdmin(admin.ModelAdmin):
         "height",
         "weight",
         "bmi",
+        "bmi_cat",
+        "name",
     ]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return super().get_queryset(request).select_virtual("name", "bmi_cat")
 
 
 class PostAdmin(admin.ModelAdmin):
@@ -74,7 +81,3 @@ class ArticleAdmin(PostAdmin):
 @admin.register(Comment)
 class CommentAdmin(PostAdmin):
     pass
-
-
-# [Person.create() for _ in range(20)]
-# [Post.create() for _ in range(200)]
