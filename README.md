@@ -6,24 +6,52 @@
 [![Build status][ci-image]][ci-link]
 [![Coverage status][codecov-image]][codecov-link]
 
+_Django Virtual Fields_ enables you to define model `fields` from computed database `expressions`.
 
-A Django tool kit
+### Documentation
 
+Full documentation is available [here][docs-link].
 
-
-## Installation
+### Installation 
 
 Install from [PyPi](https://pypi.org/project/django-virtual-fields/)
-
+    
 ```
 pip install django-virtual-fields
 ```
 
-## Documentation
+## Quick Start
 
-Full documentation is available [here][docs-link].
+Here's an example `model.py`.
 
+```python
+from django.db import models as m
+from django.db.models.fields.json import KT
+from django.db.models.functions import Concat, Extract, Now
 
+# 
+from virtual_fields.models import VirtualField
+
+class Person(m.Model):
+    # Model fields
+    first_name: str = m.CharField(max_length=100)
+    last_name: str = m.CharField(max_length=100)
+    dob: "date" = m.DateField("date of birth")
+    extra_data: dict = m.JSONField(default=dict(city="My City", country="My Country"))
+
+    # Virtual fields
+    yob: int = VirtualField("dob__year", verbose_name="year of birth")
+    age: int = VirtualField(Extract(Now(), "year") - m.F("yob"), defer=False)
+
+    city: str = VirtualField[m.CharField](KT("extra_data__city"))
+    country: str = VirtualField[m.CharField](KT("extra_data__country"))
+
+    full_name: str = VirtualField[m.CharField]()
+    @full_name.expression
+    def full_name_expressions(cls):
+        return Concat("first_name", Value(" "), "last_name")
+
+```
 
 
 
