@@ -6,24 +6,48 @@
 [![Build status][ci-image]][ci-link]
 [![Coverage status][codecov-image]][codecov-link]
 
+_Django Virtual Fields_ enables you to define model `fields` from computed database `expressions`.
 
-A Python tool kit
-
-
-
-## Installation
+### Installation 
 
 Install from [PyPi](https://pypi.org/project/django-virtual-fields/)
-
+    
 ```
 pip install django-virtual-fields
 ```
 
-## Documentation
+## Quick Start
 
-Full documentation is available [here][docs-link].
+Here's an example `model.py`.
 
+```python
+from django.db import models as m
+from django.db.models.fields.json import KT
+from django.db.models.functions import Concat, Extract, Now
 
+# 
+from virtual_fields.models import VirtualField
+
+class Person(m.Model):
+    # Model fields
+    first_name: str = m.CharField(max_length=100)
+    last_name: str = m.CharField(max_length=100)
+    dob: "date" = m.DateField("date of birth")
+    extra_data: dict = m.JSONField(default=dict(city="My City", country="My Country"))
+
+    # Virtual fields
+    yob: int = VirtualField("dob__year", verbose_name="year of birth")
+    age: int = VirtualField(Extract(Now(), "year") - m.F("yob"), defer=False)
+
+    city: str = VirtualField[m.CharField](KT("extra_data__city"))
+    country: str = VirtualField[m.CharField](KT("extra_data__country"))
+
+    full_name: str = VirtualField[m.CharField]()
+    @full_name.expression
+    def full_name_expressions(cls):
+        return Concat("first_name", Value(" "), "last_name")
+
+```
 
 
 
@@ -32,8 +56,8 @@ Full documentation is available [here][docs-link].
 [pypi-link]: https://pypi.python.org/pypi/django-virtual-fields
 [pyversions-image]: https://img.shields.io/pypi/pyversions/django-virtual-fields.svg
 [pyversions-link]: https://pypi.python.org/pypi/django-virtual-fields
-[ci-image]: https://github.com/davidkyalo/django-virtual-fields/actions/workflows/workflow.yaml/badge.svg?event=push&branch=main
+[ci-image]: https://github.com/davidkyalo/django-virtual-fields/actions/workflows/workflow.yaml/badge.svg?event=push&branch=master
 [ci-link]: https://github.com/davidkyalo/django-virtual-fields/actions?query=workflow%3ACI%2FCD+event%3Apush+branch%3Amaster
-[codecov-image]: https://codecov.io/gh/davidkyalo/django-virtual-fields/branch/main/graph/badge.svg
+[codecov-image]: https://codecov.io/gh/davidkyalo/django-virtual-fields/branch/master/graph/badge.svg
 [codecov-link]: https://codecov.io/gh/davidkyalo/django-virtual-fields
 
