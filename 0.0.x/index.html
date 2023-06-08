@@ -259,8 +259,8 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    Documentation
+  <a href="#quick-start" class="md-nav__link">
+    Quick Start
   </a>
   
 </li>
@@ -307,8 +307,8 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    Documentation
+  <a href="#quick-start" class="md-nav__link">
+    Quick Start
   </a>
   
 </li>
@@ -334,15 +334,41 @@
 <h1 id="django-virtual-fields">Django Virtual Fields</h1>
 <p><a href="https://pypi.python.org/pypi/django-virtual-fields"><img alt="PyPi version" src="https://img.shields.io/pypi/v/django-virtual-fields.svg?color=%233d85c6" /></a>
 <a href="https://pypi.python.org/pypi/django-virtual-fields"><img alt="Supported Python versions" src="https://img.shields.io/pypi/pyversions/django-virtual-fields.svg" /></a>
-<a href="https://github.com/davidkyalo/django-virtual-fields/actions?query=workflow%3ACI%2FCD+event%3Apush+branch%3Amaster"><img alt="Build status" src="https://github.com/davidkyalo/django-virtual-fields/actions/workflows/workflow.yaml/badge.svg?event=push&amp;branch=main" /></a>
-<a href="https://codecov.io/gh/davidkyalo/django-virtual-fields"><img alt="Coverage status" src="https://codecov.io/gh/davidkyalo/django-virtual-fields/branch/main/graph/badge.svg" /></a></p>
-<p>A Python tool kit</p>
-<h2 id="installation">Installation</h2>
+<a href="https://github.com/davidkyalo/django-virtual-fields/actions?query=workflow%3ACI%2FCD+event%3Apush+branch%3Amaster"><img alt="Build status" src="https://github.com/davidkyalo/django-virtual-fields/actions/workflows/workflow.yaml/badge.svg?event=push&amp;branch=master" /></a>
+<a href="https://codecov.io/gh/davidkyalo/django-virtual-fields"><img alt="Coverage status" src="https://codecov.io/gh/davidkyalo/django-virtual-fields/branch/master/graph/badge.svg" /></a></p>
+<p><em>Django Virtual Fields</em> enables you to define model <code>fields</code> from computed database <code>expressions</code>.</p>
+<h3 id="installation">Installation</h3>
 <p>Install from <a href="https://pypi.org/project/django-virtual-fields/">PyPi</a></p>
 <div class="highlight"><pre><span></span><code>pip install django-virtual-fields
 </code></pre></div>
-<h2 id="documentation">Documentation</h2>
-<p>Full documentation is available <a href="https://davidkyalo.github.io/django-virtual-fields/">here</a>.</p>
+<h2 id="quick-start">Quick Start</h2>
+<p>Here's an example <code>model.py</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.db</span> <span class="kn">import</span> <span class="n">models</span> <span class="k">as</span> <span class="n">m</span>
+<span class="kn">from</span> <span class="nn">django.db.models.fields.json</span> <span class="kn">import</span> <span class="n">KT</span>
+<span class="kn">from</span> <span class="nn">django.db.models.functions</span> <span class="kn">import</span> <span class="n">Concat</span><span class="p">,</span> <span class="n">Extract</span><span class="p">,</span> <span class="n">Now</span>
+
+<span class="c1"># </span>
+<span class="kn">from</span> <span class="nn">virtual_fields.models</span> <span class="kn">import</span> <span class="n">VirtualField</span>
+
+<span class="k">class</span> <span class="nc">Person</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="c1"># Model fields</span>
+    <span class="n">first_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="n">last_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="n">dob</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">DateField</span><span class="p">(</span><span class="s2">&quot;date of birth&quot;</span><span class="p">)</span>
+    <span class="n">extra_data</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">JSONField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">city</span><span class="o">=</span><span class="s2">&quot;My City&quot;</span><span class="p">,</span> <span class="n">country</span><span class="o">=</span><span class="s2">&quot;My Country&quot;</span><span class="p">))</span>
+
+    <span class="c1"># Virtual fields</span>
+    <span class="n">yob</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">VirtualField</span><span class="p">(</span><span class="s2">&quot;dob__year&quot;</span><span class="p">,</span> <span class="n">verbose_name</span><span class="o">=</span><span class="s2">&quot;year of birth&quot;</span><span class="p">)</span>
+    <span class="n">age</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">VirtualField</span><span class="p">(</span><span class="n">Extract</span><span class="p">(</span><span class="n">Now</span><span class="p">(),</span> <span class="s2">&quot;year&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="n">m</span><span class="o">.</span><span class="n">F</span><span class="p">(</span><span class="s2">&quot;yob&quot;</span><span class="p">),</span> <span class="n">defer</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">city</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">VirtualField</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">CharField</span><span class="p">](</span><span class="n">KT</span><span class="p">(</span><span class="s2">&quot;extra_data__city&quot;</span><span class="p">))</span>
+    <span class="n">country</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">VirtualField</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">CharField</span><span class="p">](</span><span class="n">KT</span><span class="p">(</span><span class="s2">&quot;extra_data__country&quot;</span><span class="p">))</span>
+
+    <span class="n">full_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">VirtualField</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">CharField</span><span class="p">]()</span>
+    <span class="nd">@full_name</span><span class="o">.</span><span class="n">expression</span>
+    <span class="k">def</span> <span class="nf">full_name_expressions</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Concat</span><span class="p">(</span><span class="s2">&quot;first_name&quot;</span><span class="p">,</span> <span class="n">Value</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">),</span> <span class="s2">&quot;last_name&quot;</span><span class="p">)</span>
+</code></pre></div>
 
 
 
