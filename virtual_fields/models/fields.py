@@ -63,8 +63,10 @@ def __on_class_prepared(sender: type[_T_Model], **kwds):
 
 
 def _post_save_receiver(sender, instance: _T_Model, **kwargs):
+    dct = instance.__dict__
     for n, f in instance.__class__._meta.cached_virtual_fields.items():
-        delattr(instance, f.attname)
+        if (at := f.attname) in dct:
+            delattr(instance, at)
 
 
 def _flatten(obj, types=tuple | list):
@@ -266,9 +268,9 @@ class VirtualField(m.Field, Generic[_T_Field]):
 
     @cached_property
     def source_output_field(self) -> _T_Field | None:
-        src = self.source_expression
+        src, qs = self.source_expression, self._queryset
         try:
-            return Coalesce(src, None).output_field
+            return Coalesce(src, None).resolve_expression(qs.query).output_field
         except FieldError:
             pass
 
