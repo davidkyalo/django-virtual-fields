@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import abc
-from functools import cached_property
+from functools import cached_property, partial
 from typing import TYPE_CHECKING, ClassVar, TypeVar
 
 from django.core.exceptions import FieldDoesNotExist
@@ -20,12 +20,28 @@ else:
 
 
 _T_Model = TypeVar("_T_Model", bound=Model, covariant=True)
+_T_Field = TypeVar("_T_Field", bound=m.Field, covariant=True)
 
 
 class ModelOptions(Options, ABC):
     @property
     @abstractmethod
-    def virtual_fields_map(self) -> abc.Mapping[str, "VirtualField"]:
+    def virtual_fields(self) -> abc.Mapping[str, "VirtualField"]:
+        ...
+
+    @property
+    @abstractmethod
+    def cached_virtual_fields(self) -> abc.Mapping[str, "VirtualField"]:
+        ...
+
+    @property
+    @abstractmethod
+    def deferred_virtual_fields(self) -> abc.Mapping[str, "VirtualField"]:
+        ...
+
+    @property
+    @abstractmethod
+    def virtual_fields_queryset(self) -> m.QuerySet[_T_Model]:
         ...
 
     @abstractmethod
@@ -33,30 +49,91 @@ class ModelOptions(Options, ABC):
         ...
 
 
-if not hasattr(Options, "virtual_fields_map"):
+class _FieldMap(dict[str, _T_Field]):
+    __slots__ = ("fallbacks",)
 
+    def __init__(self, val=(), *fallbacks, **kwargs):
+        super().__init__(val, **kwargs)
+        self.fallbacks = fallbacks
+
+    def __missing__(self, key):
+        for fb in self.fallbacks:
+            try:
+                return fb[key]
+            except KeyError:
+                pass
+        raise KeyError(key)
+
+
+def _patcher(*a, **kw):
+    def patch(name: str = None, value=None, *, wrap=None, override=False, cls=Options):
+        def deco(val):
+            at = val.__name__ if name is None else name
+            if override or not hasattr(cls, at):
+                val = val if wrap is None else wrap(val)
+                setattr(cls, at, val)
+                if callable(fn := getattr(val, "__set_name__", None)):
+                    fn(cls, at)
+            return value
+
+        return deco if value is None else deco(value)
+
+    if TYPE_CHECKING:
+        return patch
+    return partial(patch, *a, **kw)
+
+
+def _patch_model_options():
+    patch = _patcher(cls=Options)
+
+    @patch
     def get_virtual_field(self: ModelOptions, name: str):
         try:
-            return self.virtual_fields_map[name]
+            return self.virtual_fields[name]
         except KeyError:
             raise FieldDoesNotExist(f"{name}")
 
-    def virtual_fields_map(self: ModelOptions):
+    @patch(wrap=cached_property)
+    def virtual_fields(self: ModelOptions):
         from .fields import VirtualField
 
-        return {f.attname: f for f in self.get_fields() if isinstance(f, VirtualField)}
+        # qs = self.virtual_fields_queryset
+        by_attname = {}
+        fields = _FieldMap((), by_attname)
+        for field in self.get_fields():
+            if isinstance(field, VirtualField):
+                name, attname = field.name, getattr(field, "attname", None)
+                if attname and name != attname:
+                    by_attname[attname] = field
+                fields[name] = field
+                # qs.query.add_annotation(field.final_expression, name, field.concrete)
+        return fields
 
-    Options.FORWARD_PROPERTIES.add("virtual_fields_map")
-    Options.virtual_fields_map = cached_property(virtual_fields_map)
-    Options.virtual_fields_map.__set_name__(Options, "virtual_fields_map")
-    Options.get_virtual_field = get_virtual_field
+    @patch(wrap=cached_property)
+    def cached_virtual_fields(self: ModelOptions):
+        return {k: v for k, v in self.virtual_fields.items() if v.is_cached}
+
+    @patch(wrap=cached_property)
+    def virtual_fields_queryset(self: ModelOptions):
+        qs: m.QuerySet[_T_Model] = self.base_manager.get_queryset()
+        return qs
+
+    Options.REVERSE_PROPERTIES |= {
+        "virtual_fields",
+        "virtual_fields_queryset",
+        "cached_virtual_fields",
+        "deferred_virtual_fields",
+    }
+
+
+_patch_model_options()
 
 
 if not hasattr(QuerySet, "select_virtual"):
 
     def select_virtual(self: QuerySet[_T_Model], *fields) -> QuerySet[_T_Model]:
         opts, qs = self.model._meta, self._chain()
-        allowed, query = opts.virtual_fields_map, qs.query
+        allowed, query = opts.virtual_fields, qs.query
         for name in fields:
             if name not in allowed:
                 opts.get_field(name)

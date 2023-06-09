@@ -16,6 +16,7 @@ from faker.providers import (
     person,
     python,
 )
+from faker.proxy import UniqueProxy
 from typing_extensions import Self
 
 TProvider = (
@@ -76,11 +77,15 @@ class ExtraProvider(BaseProvider):
         return g.time_delta(g.date_time() if end_datetime is None else end_datetime)
 
 
-Faker = Generator | ExtraProvider | TProvider
+class _FakerUnique(t.Protocol):
+    unique: Self | UniqueProxy
+
+
+Faker = Generator | ExtraProvider | TProvider | _FakerUnique
 
 faker: Faker = fk.Faker()
 
 faker.add_provider(ExtraProvider)
 
 
-ufaker: Faker = faker.unique
+ufaker = faker.unique

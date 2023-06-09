@@ -12,7 +12,7 @@ def get_env_name(default="dev"):
 def get_tox_env_name(default=None):
     tox_env, tox_env_dir = os.getenv("TOX_ENV_NAME"), os.getenv("TOX_ENV_DIR")
     prog, val = sys.executable, default
-    if tox_env_dir and tox_env:
+    if tox_env_dir and tox_env:  # pragma: no cover
         if prog.startswith(tox_env_dir):
             val = tox_env
 

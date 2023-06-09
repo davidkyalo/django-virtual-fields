@@ -8,14 +8,15 @@ from operator import attrgetter
 from types import GenericAlias, SimpleNamespace
 from uuid import UUID
 
-from typing_extensions import Self
-
 from django.core.exceptions import FieldDoesNotExist
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models as m
-from tests.app.fields import get_field_data_type, to_field_name
-from virtual_fields.utils import JsonPrimitive
+from typing_extensions import Self
 
+from examples.faker import ufaker
+from tests.app.fields import get_field_data_type, to_field_name
+from virtual_fields.models import VirtualField
+from virtual_fields.utils import JsonPrimitive
 
 _FT = t.TypeVar("_FT", bound=m.Field)
 _T = t.TypeVar("_T")
@@ -92,7 +93,7 @@ class FieldModel(AbcTestModel):
     _rel = dict(to="self", on_delete=m.SET_NULL, blank=True, null=True)
     foreignkey = m.ForeignKey(**_rel, related_name="foreignkey_reverse")
     onetoonefield = m.OneToOneField(**_rel, related_name="onetoonefield_reverse")
-    manytomanyfield = m.ManyToManyField("self", blank=True, null=True)
+    manytomanyfield = m.ManyToManyField("self", blank=True)
     del _rel
     foreignkey_reverse: "m.manager.RelatedManager[Self]"
     onetoonefield_reverse: Self | None
@@ -191,40 +192,41 @@ class TestModel(FieldModel):
     def value(self, val: _T):
         self.field_value = self.json_value = val
 
-    # @t.overload
-    # @classmethod
-    # def define(
-    #     cls,
-    #     /,
-    #     test: type[AliasField] = None,
-    #     *,
-    #     name: str = None,
-    #     field_type: type[m.Field] = None,
-    #     source: ExprSource = None,
-    #     **dct,
-    # ) -> type[Self]:
-    #     ...
+    @t.overload
+    @classmethod
+    def define(
+        cls,
+        /,
+        test: type[VirtualField] = None,
+        *,
+        name: str = None,
+        field_type: type[m.Field] = None,
+        source: ExprSource = None,
+        **dct,
+    ) -> type[Self]:
+        ...
 
-    # @classmethod
-    # def define(cls, /, *, name=None, **dct) -> type[Self]:
-    #     if "Meta" not in dct:
-    #         dct["Meta"] = type("Meta", (ProxyMeta,), {})
-    #     elif isinstance(dct["Meta"], abc.Mapping):
-    #         dct["Meta"] = type("Meta", (ProxyMeta,), dict(dct["Meta"]))
+    @classmethod
+    def define(cls, /, *, name=None, **dct) -> type[Self]:
+        if "Meta" not in dct:
+            dct["Meta"] = type("Meta", (ProxyMeta,), {})
+        elif isinstance(dct["Meta"], abc.Mapping):
+            dct["Meta"] = type("Meta", (ProxyMeta,), dict(dct["Meta"]))
 
-    #     if name is None:
-    #         name = f"TestCase_{dct.get('field_type', m.Field).__name__}_{ufake.random_int(1000, 9999)}"
+        field_type = dct.get("field_type")
+        if name is None:
+            name = f"TestCase_{(field_type or  m.Field).__name__}_{ufaker.random_int(100, 999)}"
 
-    #     dct = {
-    #         "__module__": __name__,
-    #         "__name__": name,
-    #         "proxy": AliasField("test")
-    #         if isinstance(dct.get("test"), m.Field)
-    #         else None,
-    #         **dct,
-    #         "source": ExprSource(dct.get("source")),
-    #     }
-    #     return type(name, (cls,), dct)
+        dct = {
+            "__module__": __name__,
+            "__name__": name,
+            "proxy": VirtualField("test", default=None)
+            if isinstance(dct.get("test"), m.Field)
+            else None,
+            **dct,
+            "source": ExprSource(dct.get("source")),
+        }
+        return type(name, (cls,), dct)
 
     def __str__(self) -> str:
         target = self.field_type and self.field_type.__name__.lower() or ""

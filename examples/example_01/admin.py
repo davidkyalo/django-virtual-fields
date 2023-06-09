@@ -53,12 +53,7 @@ class PersonAdmin(admin.ModelAdmin):
     ]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
-        return (
-            super()
-            .get_queryset(request)
-            .prefetch_related("liked")
-            .select_virtual("name", "bmi_cat")
-        )
+        return super().get_queryset(request).select_virtual("name", "bmi_cat")
 
 
 class PostAdmin(admin.ModelAdmin):
@@ -66,7 +61,6 @@ class PostAdmin(admin.ModelAdmin):
         "id",
         "title",
         "author",
-        "authored_by",
         "published_at",
         "created_at",
         "parent",

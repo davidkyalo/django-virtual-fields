@@ -33,7 +33,7 @@ def _fake_data():
 class Person(m.Model):
     first_name: str = m.CharField(max_length=100)
     last_name: str = m.CharField(max_length=100)
-    dob: datetime.date = m.DateField()
+    dob: datetime.date = m.DateField("date of birth")
     data = m.JSONField(encoder=JSONEncoder, blank=True, default=_fake_data)
 
     name = VirtualField("first_name", defer=True)
@@ -41,24 +41,22 @@ class Person(m.Model):
     full_name: str = VirtualField[m.CharField](
         Concat("first_name", m.Value(" "), "last_name")
     )
-
-    age: int = VirtualField[m.IntegerField](
-        Extract(Now(), "year") - Extract("dob", "year")
-    )
+    yob: int = VirtualField("dob__year", verbose_name="year of birth")
+    age: int = VirtualField[m.IntegerField](Extract(Now(), "year") - m.F("yob"))
 
     country = VirtualField[m.CharField](
         KT("data__country"), default=ufaker.country, editable=True
     )
     city = VirtualField[m.CharField](KT("data__city"), editable=True)
     height = VirtualField[m.DecimalField](
-        KT("data__height"), decimal_places=2, max_digits=8, db_cast=True
+        KT("data__height"), decimal_places=2, max_digits=8, cast=True
     )
-    weight = VirtualField[m.IntegerField]("data__weight", db_cast=True)
+    weight = VirtualField[m.IntegerField]("data__weight", cast=True)
     bmi = VirtualField[m.DecimalField](
         m.F("weight") / m.functions.Power(m.F("height"), 2),
         max_digits=12,
         decimal_places=3,
-        db_cast=True,
+        cast=True,
         verbose_name="body mass index",
     )
 
@@ -72,7 +70,7 @@ class Person(m.Model):
         defer=True,
     )
 
-    likes = VirtualField[m.IntegerField](m.Count("liked"))
+    # likes = VirtualField[m.IntegerField](m.Count("liked"))
     posts: "m.manager.RelatedManager[Post]"
     liked: "m.manager.RelatedManager[Post]"
 
@@ -128,6 +126,9 @@ class PostManager(m.Manager):
 
 
 class Post(m.Model):
+    class Meta:
+        default_manager_name = "objects"
+
     objects = PostManager()
     title: str = m.CharField(max_length=255)
     content: str = m.TextField()
@@ -145,7 +146,7 @@ class Post(m.Model):
 
     children: "m.manager.RelatedManager[Post]"
 
-    authored_by = VirtualField[m.CharField]("author__full_name")
+    # authored_by = VirtualField[m.CharField]("author__full_name", defer=True)
 
     # @authored_by.expression
     # def authored_by_expr(cls):
