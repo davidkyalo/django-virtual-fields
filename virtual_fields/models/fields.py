@@ -11,18 +11,15 @@ from typing import (
     Final,
     Generic,
     TypeVar,
-    Union,
-    cast,
     get_origin,
     overload,
 )
-from weakref import WeakSet
 
 from django.core.exceptions import FieldError, ImproperlyConfigured
 from django.db import models as m
 from django.db.models import Q
 from django.db.models.constants import LOOKUP_SEP
-from django.db.models.expressions import BaseExpression, Combinable, Expression
+from django.db.models.expressions import BaseExpression, Combinable
 from django.db.models.functions import Cast, Coalesce
 from django.db.models.query_utils import DeferredAttribute
 from django.dispatch import receiver
