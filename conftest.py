@@ -27,6 +27,12 @@ def _session_faker():
     return fake
 
 
+@pyt.fixture(name="faker", autouse=True)
+def _faker(_session_faker):
+    _session_faker.unique.clear()
+    return _session_faker
+
+
 @pyt.fixture()
 def ufaker(faker):
     return faker.unique

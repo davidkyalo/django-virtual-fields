@@ -42,7 +42,7 @@ class _JsonDict(dict):
 class ExtraProvider(BaseProvider):
     generator: "Generator | Self | TProvider"
 
-    def pybytes(self, min_len: int = 0, max_len: int = 1024) -> bytes:
+    def pybytes(self, min_len: int = 2, max_len: int = 1024) -> bytes:
         ln = self.random_int(min_len, max_len)
         return self.generator.binary(ln)
 
@@ -59,7 +59,7 @@ class ExtraProvider(BaseProvider):
 
     def fixed_decimal(self, decimal_places=6, right_digits=None, *a, **kw) -> Decimal:
         if right_digits is None:
-            right_digits = self.random_int(2, 54)
+            right_digits = self.random_int(2, 18 - decimal_places)
         return self.generator.pydecimal(right_digits, decimal_places, *a, **kw)
 
     def memoryview(self, min_len: int = 0, max_len: int = 1024):
@@ -88,4 +88,4 @@ faker: Faker = fk.Faker()
 faker.add_provider(ExtraProvider)
 
 
-ufaker = faker.unique
+ufaker: Faker = faker.unique

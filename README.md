@@ -30,7 +30,7 @@ from django.db.models.fields.json import KT
 from django.db.models.functions import Concat, Extract, Now
 
 # 
-from virtual_fields.models import VirtualField
+from virtual_fields import VirtualField
 
 class Person(m.Model):
     # Model fields

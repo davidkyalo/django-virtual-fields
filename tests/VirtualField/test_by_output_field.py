@@ -4,15 +4,17 @@ from uuid import UUID
 
 import pytest as pyt
 from django.db import models as m
+from django.db.models.fields.json import KT, JSONField
 from zana.types.collections import DefaultDict, ReadonlyDict
 
 from tests.app.models import ExprSource as Src
 from tests.app.models import T_Func, TestModel
-from virtual_fields.models import VirtualField
+from virtual_fields import VirtualField
 
 _VT = t.TypeVar("_VT", covariant=True)
 _FT = t.TypeVar("_FT", bound=m.Field, covariant=True)
 _MT = t.TypeVar("_MT", bound=TestModel, covariant=True)
+
 
 _TF_Target = t.Literal["field", "json"]
 
@@ -46,7 +48,8 @@ def expression(field_name: str, through: str, field: m.Field, source: Src):
     through = f"{through}__".lstrip("_")
     match source:
         case Src.JSON:
-            return f"{through}json__{field_name}"
+            exp = f"{through}json__{field_name}"
+            return exp if issubclass(field, JSONField) else KT(exp)
         case Src.EVAL:
             return m.Case(
                 m.When(
@@ -63,7 +66,6 @@ def expression(field_name: str, through: str, field: m.Field, source: Src):
 def type_var(source: Src, field):
     if source != Src.FIELD:
         return field
-    return field
 
 
 @pyt.fixture
@@ -103,7 +105,7 @@ def model(define: T_Func[type[VirtualField]]):
 @pyt.fixture
 def kwargs(request: pyt.FixtureRequest, field, source):
     self: FieldTestCase = request.instance
-    skw = getattr(self, f"{source}_source_kwargs", {})
+    skw = getattr(self, f"{source}_source_kwargs".lower(), {})
     return {
         **self.default_kwargs,
         **self.default_source_kwargs.get(m.Field, {}),
@@ -183,9 +185,10 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
 
     # @pyt.mark.skip("NOT SETUP")
     def test_direct_access(self, factory: T_Func[_VT], model: type[TestModel]):
-        qs = model.objects.all()
+        qs: m.QuerySet[model] = model.objects.all()
         val_0, val_1 = factory(), factory()
         obj_0, obj_1 = (qs.create(value=v) for v in (val_0, val_1))
+        sql = str(qs.query)
         # obj_0.refresh_from_db(), obj_1.refresh_from_db()
         # Test the values of each object
         for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
@@ -308,17 +311,6 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
             assert obj.proxy == expected
 
 
-TNumTypeField = (
-    m.BigIntegerField
-    | m.IntegerField
-    | m.PositiveBigIntegerField
-    | m.SmallIntegerField
-    | m.PositiveSmallIntegerField
-    | m.PositiveIntegerField
-    | m.FloatField
-    # | m.DecimalField
-)
-
 TStrField = (
     m.CharField
     | m.TextField
@@ -328,35 +320,53 @@ TStrField = (
     | m.FileField
     | m.FilePathField
 )
-TDateTypeField = m.DateField | m.DateTimeField | m.TimeField | m.DurationField
-
-
-class test_NumberFields(FieldTestCase[str, TNumTypeField, TestModel]):
-    source_support = DefaultDict({(Src.JSON, m.DecimalField): False}, True)
 
 
 class test_StrFields(FieldTestCase[str, TStrField, TestModel]):
     pass
 
 
+TNumTypeField = (
+    m.BigIntegerField
+    | m.IntegerField
+    | m.PositiveBigIntegerField
+    | m.SmallIntegerField
+    | m.PositiveSmallIntegerField
+    | m.PositiveIntegerField
+    | m.FloatField
+    | m.DecimalField
+)
+
+
+class test_NumberFields(FieldTestCase[str, TNumTypeField, TestModel]):
+    json_source_kwargs = {m.Field: dict(cast=True)}
+    default_source_kwargs = {
+        m.DecimalField: dict(decimal_places=6, max_digits=54),
+    }
+
+
 class test_GenericIPAddressField(
     FieldTestCase[str, m.GenericIPAddressField, TestModel]
 ):
-    pass
+    json_source_kwargs = {m.Field: dict(cast=True)}
 
 
 class test_BooleanField(FieldTestCase[bool, m.BooleanField, TestModel]):
+    json_source_kwargs = {m.Field: dict(cast=True)}
     pass
 
 
 class test_UUIDField(FieldTestCase[UUID, m.UUIDField, TestModel]):
-    all_sources = (Src.FIELD, Src.EVAL)
+    # all_sources = (Src.FIELD, Src.EVAL)
+    json_source_kwargs = {m.Field: dict(cast=True)}
     pass
 
 
 class test_BinaryField(FieldTestCase[str, m.BinaryField, TestModel]):
-    json_source_kwargs = {m.Field: dict(cast=True)}
     all_sources = (Src.FIELD, Src.EVAL)
+
+
+TDateTypeField = m.DateField | m.DateTimeField | m.TimeField | m.DurationField
 
 
 class test_DateTypesFields(FieldTestCase[str, TDateTypeField, TestModel]):

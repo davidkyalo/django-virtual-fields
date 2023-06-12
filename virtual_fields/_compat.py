@@ -49,20 +49,20 @@ class ModelOptions(Options, ABC):
         ...
 
 
-class _FieldMap(dict[str, _T_Field]):
-    __slots__ = ("fallbacks",)
+# class _FieldMap(dict[str, _T_Field]):
+#     __slots__ = ("fallbacks",)
 
-    def __init__(self, val=(), *fallbacks, **kwargs):
-        super().__init__(val, **kwargs)
-        self.fallbacks = fallbacks
+#     def __init__(self, val=(), *fallbacks, **kwargs):
+#         super().__init__(val, **kwargs)
+#         self.fallbacks = fallbacks
 
-    def __missing__(self, key):
-        for fb in self.fallbacks:
-            try:
-                return fb[key]
-            except KeyError:
-                pass
-        raise KeyError(key)
+#     def __missing__(self, key):
+#         for fb in self.fallbacks:
+#             try:
+#                 return fb[key]
+#             except KeyError:
+#                 pass
+#         raise KeyError(key)
 
 
 def _patcher(*a, **kw):
@@ -86,12 +86,12 @@ def _patcher(*a, **kw):
 def _patch_model_options():
     patch = _patcher(cls=Options)
 
-    @patch
-    def get_virtual_field(self: ModelOptions, name: str):
-        try:
-            return self.virtual_fields[name]
-        except KeyError:
-            raise FieldDoesNotExist(f"{name}")
+    # @patch
+    # def get_virtual_field(self: ModelOptions, name: str):
+    #     try:
+    #         return self.virtual_fields[name]
+    #     except KeyError:
+    #         raise FieldDoesNotExist(f"{name}")
 
     @patch(wrap=cached_property)
     def virtual_fields(self: ModelOptions):
@@ -99,28 +99,22 @@ def _patch_model_options():
 
         # qs = self.virtual_fields_queryset
         by_attname = {}
-        fields = _FieldMap((), by_attname)
+        fields = {}  # _FieldMap((), by_attname)
         for field in self.get_fields():
             if isinstance(field, VirtualField):
                 name, attname = field.name, getattr(field, "attname", None)
-                if attname and name != attname:
-                    by_attname[attname] = field
+                # if attname and name != attname:
+                #     by_attname[attname] = field
                 fields[name] = field
                 # qs.query.add_annotation(field.final_expression, name, field.concrete)
         return fields
 
     @patch(wrap=cached_property)
     def cached_virtual_fields(self: ModelOptions):
-        return {k: v for k, v in self.virtual_fields.items() if v.is_cached}
-
-    @patch(wrap=cached_property)
-    def virtual_fields_queryset(self: ModelOptions):
-        qs: m.QuerySet[_T_Model] = self.base_manager.get_queryset()
-        return qs
+        return {k: v for k, v in self.virtual_fields.items() if v.cache}
 
     Options.REVERSE_PROPERTIES |= {
         "virtual_fields",
-        "virtual_fields_queryset",
         "cached_virtual_fields",
         "deferred_virtual_fields",
     }
@@ -133,13 +127,9 @@ if not hasattr(QuerySet, "select_virtual"):
 
     def select_virtual(self: QuerySet[_T_Model], *fields) -> QuerySet[_T_Model]:
         opts, qs = self.model._meta, self._chain()
-        allowed, query = opts.virtual_fields, qs.query
+        allowed = opts.virtual_fields
         for name in fields:
-            if name not in allowed:
-                opts.get_field(name)
-                raise ValueError(f"field {name!r} is not a VirtualField.")
-            query.add_annotation(m.F(name), name)
+            qs = allowed[name].add_to_query(qs)
         return qs
 
     QuerySet.select_virtual = select_virtual
-    QuerySet.filter

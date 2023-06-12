@@ -1,5 +1,6 @@
 import datetime
 import typing as t
+from decimal import Decimal
 from operator import attrgetter
 from pprint import pformat
 from random import randint
@@ -12,7 +13,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 
 from examples.faker import faker, ufaker
-from virtual_fields.models import VirtualField
+from virtual_fields import VirtualField
 
 if t.TYPE_CHECKING:
     from typing_extensions import Self
@@ -36,39 +37,51 @@ class Person(m.Model):
     dob: datetime.date = m.DateField("date of birth")
     data = m.JSONField(encoder=JSONEncoder, blank=True, default=_fake_data)
 
-    name = VirtualField("first_name", defer=True)
-
     full_name: str = VirtualField[m.CharField](
         Concat("first_name", m.Value(" "), "last_name")
     )
     yob: int = VirtualField("dob__year", verbose_name="year of birth")
     age: int = VirtualField[m.IntegerField](Extract(Now(), "year") - m.F("yob"))
 
+    name = VirtualField("full_name", m.Value(""), cache=False)
+
+    @name.getter
+    def _get_name(self):
+        return self.full_name
+
+    @name.setter
+    def _set_name(self, val):
+        self.first_name, _, self.last_name = f"{val}".partition(" ")
+
+    @name.deleter
+    def _del_name(self):
+        pass
+
     country = VirtualField[m.CharField](
-        KT("data__country"), default=ufaker.country, editable=True
+        KT("data__country"), default=ufaker.country, defer=True, editable=True
     )
-    city = VirtualField[m.CharField](KT("data__city"), editable=True)
+    city = VirtualField[m.CharField](KT("data__city"), defer=True, editable=True)
     height = VirtualField[m.DecimalField](
         KT("data__height"), decimal_places=2, max_digits=8, cast=True
     )
     weight = VirtualField[m.IntegerField]("data__weight", cast=True)
-    bmi = VirtualField[m.DecimalField](
+    bmi = VirtualField(
         m.F("weight") / m.functions.Power(m.F("height"), 2),
-        max_digits=12,
-        decimal_places=3,
+        output_field=m.DecimalField(max_digits=12, decimal_places=3),
         cast=True,
         verbose_name="body mass index",
     )
 
-    bmi_cat = VirtualField(
-        m.Case(
+    bmi_cat = VirtualField(defer=True)
+
+    @bmi_cat.expression
+    def bmi_cat(cls):
+        return m.Case(
             m.When(bmi__lt=18.5, then=m.Value("Underweight")),
             m.When(bmi__lt=25, then=m.Value("Normal weight")),
             m.When(bmi__lt=30, then=m.Value("Overweight")),
             default=m.Value("Obesity"),
-        ),
-        defer=True,
-    )
+        )
 
     # likes = VirtualField[m.IntegerField](m.Count("liked"))
     posts: "m.manager.RelatedManager[Post]"

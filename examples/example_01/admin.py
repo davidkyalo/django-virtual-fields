@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.contrib import admin
+from django.db import models as m
 from django.db.models.query import QuerySet
 from django.http.request import HttpRequest
 
@@ -51,6 +52,8 @@ class PersonAdmin(admin.ModelAdmin):
         "bmi_cat",
         "name",
     ]
+
+    ordering = ["age", "name"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
         return super().get_queryset(request).select_virtual("name", "bmi_cat")

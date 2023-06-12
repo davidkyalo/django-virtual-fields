@@ -15,8 +15,9 @@ from typing_extensions import Self
 
 from examples.faker import ufaker
 from tests.app.fields import get_field_data_type, to_field_name
-from virtual_fields.models import VirtualField
-from virtual_fields.utils import JsonPrimitive
+from virtual_fields import VirtualField
+
+from .utils import JsonPrimitive
 
 _FT = t.TypeVar("_FT", bound=m.Field)
 _T = t.TypeVar("_T")
@@ -42,6 +43,8 @@ class JSONEncoder(DjangoJSONEncoder):
     def default(self, o):
         if isinstance(o, (memoryview, bytes)):
             return b64encode(o).decode("ascii")
+        elif isinstance(o, UUID):
+            return o.hex
         return super().default(o)
 
 
@@ -68,7 +71,7 @@ class FieldModel(AbcTestModel):
 
     # number types
     decimalfield: Decimal = m.DecimalField(
-        blank=True, null=True, decimal_places=6, max_digits=54
+        blank=True, null=True, decimal_places=6, max_digits=20
     )
     floatfield: float = m.FloatField(blank=True, null=True)
     bigintegerfield: int = m.BigIntegerField(blank=True, null=True)
@@ -220,7 +223,7 @@ class TestModel(FieldModel):
         dct = {
             "__module__": __name__,
             "__name__": name,
-            "proxy": VirtualField("test", default=None)
+            "proxy": VirtualField("test", defer=True, default=None)
             if isinstance(dct.get("test"), m.Field)
             else None,
             **dct,
@@ -230,7 +233,7 @@ class TestModel(FieldModel):
 
     def __str__(self) -> str:
         target = self.field_type and self.field_type.__name__.lower() or ""
-        return f"{target} - {str(getattr(self, 'test', ''))[:60]}({self.pk})".strip(
+        return f"{target} - {repr(getattr(self, 'test', ''))[:60]}({self.pk})".strip(
             " -"
         )
 
