@@ -7,14 +7,19 @@
 [![Coverage status][codecov-image]][codecov-link]
 
 _Django Virtual Fields_ enables you to define model `fields` from computed database `expressions`.
+_Django Virtual Fields_ enables you to define model `fields` from computed database `expressions`.
 
+### Documentation
 ### Documentation
 
 Full documentation is available [here][docs-link].
+Full documentation is available [here][docs-link].
 
+### Installation 
 ### Installation 
 
 Install from [PyPi](https://pypi.org/project/django-virtual-fields/)
+    
     
 ```
 pip install django-virtual-fields
@@ -30,7 +35,7 @@ from django.db.models.fields.json import KT
 from django.db.models.functions import Concat, Extract, Now
 
 # 
-from virtual_fields.models import VirtualField
+from virtual_fields import VirtualField
 
 class Person(m.Model):
     # Model fields
@@ -46,6 +51,10 @@ class Person(m.Model):
     city: str = VirtualField[m.CharField](KT("extra_data__city"))
     country: str = VirtualField[m.CharField](KT("extra_data__country"))
 
+    full_name: str = VirtualField[m.CharField]()
+    @full_name.expression
+    def full_name_expressions(cls):
+        return Concat("first_name", Value(" "), "last_name")
     full_name: str = VirtualField[m.CharField]()
     @full_name.expression
     def full_name_expressions(cls):

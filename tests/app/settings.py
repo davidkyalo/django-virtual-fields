@@ -14,6 +14,14 @@ from pathlib import Path
 
 import environ
 
+try:
+    import debug_toolbar  # type: ignore
+except ImportError:
+    debug_toolbar = None
+else:
+    debug_toolbar = True
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = (Path(__file__) / "../../../").resolve()
 
@@ -35,8 +43,16 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = ["*"]
 
+INTERNAL_IPS = [
+    # ...
+    "127.0.0.1",
+    # ...
+]
 
-LOG_LEVEL = "DEBUG"
+RESULTS_CACHE_SIZE = 50
+SHOW_COLLAPSED = True
+
+LOG_LEVEL = "INFO"
 
 LOGGING = {
     "version": 1,
@@ -95,6 +111,11 @@ LOGGING = {
         },
         "virtual_fields": {
             "handlers": ["console", "mail_admins"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "examples": {
+            "handlers": ["console", "mail_admins"],
             "level": LOG_LEVEL,
             "propagate": True,
         },
@@ -106,6 +127,7 @@ LOGGING = {
     },
 }
 
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -115,11 +137,15 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "polymorphic",
+    *(["debug_toolbar"] if debug_toolbar else []),
+    "virtual_fields",
     "tests.app",
+    "examples",
+    "examples.example_01",
 ]
 
 MIDDLEWARE = [
+    *(["debug_toolbar.middleware.DebugToolbarMiddleware"] if debug_toolbar else []),
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -129,7 +155,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "example.urls"
+ROOT_URLCONF = "examples.urls"
 
 TEMPLATES = [
     {
@@ -147,30 +173,34 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "example.wsgi.application"
+WSGI_APPLICATION = "examples.wsgi.application"
 
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
 DATABASES_BY_VENDOR: dict = {
-    # "sqlite": {
-    #     "ENGINE": "django.db.backends.sqlite3",
-    #     "NAME": BASE_DIR / "db.sqlite3",
-    # },
-    "sqlite": env.db_url_config("sqlite:////tmp/test-sqlite.db"),
-    "mysql": env.db_url_config("mysql://root:root@localhost/test_db"),
     "pgsql": env.db_url_config("postgres://root:root@localhost/test_db"),
+    "mysql": env.db_url_config("mysql://root:root@localhost/test_db"),
+    "sqlite": env.db_url_config(f"sqlite:///test_db.sqlite"),
     **env.dict("DATABASES", {"value": env.db_url_config}, {}),
 }
 DATABASE_VENDOR = env("DATABASE_VENDOR") or next(iter(DATABASES_BY_VENDOR))
 DATABASES = dict(default=DATABASES_BY_VENDOR[DATABASE_VENDOR])
-tox_env: str | None = env("TOX_ENV_NAME", default=None)
-if tox_env:
+
+from tests import get_env_name
+
+ENV_NAME = get_env_name("").replace(f"-{DATABASE_VENDOR}", "")
+
+
+db: dict = DATABASES["default"]
+if en := ENV_NAME:
     for k in DATABASES_BY_VENDOR:
-        tox_env = tox_env.replace(f"-{k}", "")
-    tox_env = tox_env.strip("-_.").replace("--", "-").replace(".", "").replace("-", "_")
-    DATABASES["default"]["NAME"] = f"{DATABASES['default']['NAME']}__{tox_env}"
+        en = en.replace(f"-{k}", "")
+    if en := en.strip("-_.").replace("--", "-").replace(".", "").replace("-", "_"):
+        db["NAME"] = f"{en}__{db['NAME']}"
+del db, en
 
 
 # Password validation

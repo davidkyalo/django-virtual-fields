@@ -137,7 +137,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "polymorphic",
     *(["debug_toolbar"] if debug_toolbar else []),
     "virtual_fields",
     "examples",
@@ -155,7 +154,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# ROOT_URLCONF = "examples.urls"
+ROOT_URLCONF = "examples.urls"
 
 TEMPLATES = [
     {
@@ -189,7 +188,7 @@ DATABASES_BY_VENDOR: dict = {
 DATABASE_VENDOR = env("DATABASE_VENDOR") or next(iter(DATABASES_BY_VENDOR))
 DATABASES = dict(default=DATABASES_BY_VENDOR[DATABASE_VENDOR])
 
-from virtual_fields.testing import get_env_name
+from tests import get_env_name
 
 ENV_NAME = get_env_name("").replace(f"-{DATABASE_VENDOR}", "")
 
@@ -227,7 +226,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "Africa/Nairobi"
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -243,5 +242,3 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-ROOT_URLCONF = "examples.urls"

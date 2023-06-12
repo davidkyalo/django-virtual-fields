@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from examples.example_01.models import Person, Post
 from examples.faker import Faker
-from virtual_fields.models import VirtualField
+from virtual_fields import VirtualField
 
 pytestmark = [
     pytest.mark.django_db(databases=[*settings.DATABASES]),
@@ -69,7 +69,9 @@ def test_example(
     qs = (
         qs
         # .defer("age")
-        .exclude(full_name="abc.xyz").filter(age__gt=0)
+        .exclude(full_name="abc.xyz")
+        .filter(age__gt=0)
+        .select_virtual("bmi")
     )
     # qs = qs.filter(age__gt=2, city="Nairobi", full_name="abc").order_by("age")
     sql = qs.query

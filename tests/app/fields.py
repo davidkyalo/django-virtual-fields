@@ -10,7 +10,8 @@ from django.apps import apps
 from django.db import models as m
 
 from examples.faker import ufaker
-from virtual_fields.utils import JsonPrimitive
+
+from .utils import JsonPrimitive
 
 _FT = t.TypeVar("_FT", bound=m.Field)
 _T = t.TypeVar("_T")
@@ -25,7 +26,7 @@ FIELD_FACTORIES = {
     m.SlugField: ufaker.slug,
     m.TextField: ufaker.text,
     m.URLField: ufaker.url,
-    m.BinaryField: ufaker.memoryview,
+    m.BinaryField: ufaker.pybytes,
     m.GenericIPAddressField: ufaker.ipv6,
     m.DateField: ufaker.date_object,
     m.DateTimeField: ufaker.date_time,
