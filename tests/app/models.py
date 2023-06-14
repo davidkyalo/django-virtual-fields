@@ -71,7 +71,7 @@ class FieldModel(AbcTestModel):
 
     # number types
     decimalfield: Decimal = m.DecimalField(
-        blank=True, null=True, decimal_places=6, max_digits=20
+        blank=True, null=True, decimal_places=4, max_digits=14
     )
     floatfield: float = m.FloatField(blank=True, null=True)
     bigintegerfield: int = m.BigIntegerField(blank=True, null=True)

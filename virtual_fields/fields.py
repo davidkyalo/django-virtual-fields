@@ -498,3 +498,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
                     yield from f.__get_source_fields(recursive=recursive, src=self)
                 else:
                     yield info
+
+
+class RelatedVirtualField(VirtualField[_T_Field]):
+    defer = True

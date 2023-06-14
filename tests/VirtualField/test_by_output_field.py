@@ -181,6 +181,7 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
         )
         # Ensure the field type automatically maps
         assert isinstance(test.output_field, field)
+        assert isinstance(proxy.output_field, field)
         # assert isinstance(proxy.get_internal_field(), field)
 
     # @pyt.mark.skip("NOT SETUP")
