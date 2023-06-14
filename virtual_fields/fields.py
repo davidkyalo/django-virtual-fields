@@ -409,18 +409,6 @@ class VirtualField(m.Field, Generic[_T_Field]):
         super().set_attributes_from_name(name)
         self.concrete = not self.defer
 
-    # def get_db_prep_value(self, *args, **kwds):
-    #     return (self.output_field or super()).get_db_prep_value(*args, **kwds)
-
-    # def get_prep_value(self, value):
-    #     """Perform preliminary non-db specific value checks and conversions."""
-    #     return (self.output_field or super()).get_prep_value(value)
-
-    # def get_attname_column(self):
-    #     """Sets column to `None` for deferred fields to prevent selection."""
-    #     attname, column = super().get_attname_column()
-    #     return attname, None if self.defer else column
-
     def set_source_expressions(self, *expressions):
         self.expressions = expressions
 

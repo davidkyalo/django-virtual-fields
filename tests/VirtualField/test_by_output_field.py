@@ -64,7 +64,7 @@ def expression(field_name: str, through: str, field: m.Field, source: Src):
 
 @pyt.fixture
 def type_var(source: Src, field):
-    if source != Src.FIELD:
+    if source == Src.JSON:
         return field
 
 
