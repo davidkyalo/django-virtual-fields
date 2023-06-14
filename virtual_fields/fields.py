@@ -3,7 +3,7 @@ from functools import reduce
 from logging import getLogger
 from operator import methodcaller, or_
 from threading import RLock
-from types import new_class
+from types import GenericAlias, new_class
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -226,14 +226,14 @@ class VirtualField(m.Field, Generic[_T_Field]):
 
     def __class_getitem__(cls, params):
         out: type[_T_Field] = params[0] if isinstance(params, (tuple, list)) else params
-        out, base, final = get_origin(out) or out, cls._output_type_, cls
+        out, base, final = (get_origin(out) or out), cls._output_type_, cls
 
         if base is None and isinstance(out, type) and issubclass(out, m.Field):
             assert base is None or issubclass(
                 out, base
             ), f"must be a subtype of {base.__name__}"
-            cache = cls.__output_typed_
-            if (final := cache.get(out)) is None:
+            cache, ck = cls.__output_typed_, (cls, out)
+            if (final := cache.get(ck)) is None:
                 with cls.__out_lock:
                     if (final := cache.get(out)) is None:
                         name = f"{out.__name__.replace('Field', '')}{cls.__name__}"
@@ -244,7 +244,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
                             filter(None, map(by_typ.get, out.__mro__[::-1])),
                             cls._output_kwargs_ or {},
                         )
-                        cache[out] = final = new_class(
+                        cache[ck] = final = new_class(
                             name,
                             (cls[_T_Field],),
                             None,
@@ -258,7 +258,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
                                 },
                             ),
                         )
-        return super(cls, final).__class_getitem__(params)
+        return GenericAlias(final, params)
 
     def __new__(cls: type[Self], *a, output_field: _T_Field = None, **kw):
         if output_field is not None:
@@ -413,7 +413,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
 
     def add_to_query(self, qs: m.QuerySet[_T_Model], alias=None, select=True):
         name = self.name
-        qs.query.add_annotation(F(name), alias or name, select)
+        qs.query.add_annotation(self.final_expression, alias or name, select)
         return qs
 
     def get_queryset_for_object(self, obj: _T_Model):
@@ -502,3 +502,29 @@ class VirtualField(m.Field, Generic[_T_Field]):
 
 class RelatedVirtualField(VirtualField[_T_Field]):
     defer = True
+    # is_relation = True
+
+    # @cached_property
+    # def related_field(self):
+    #     print("*" * 40)
+    #     print("*", f"{self.name}")
+    #     print("*", f" - get_col: {rv}")
+    #     print("*" * 40)
+    #     # for expr
+    #     # return (self.source_expressions)
+
+    def get_col(self, alias, output_field=None):
+        rv = super().get_col(alias, output_field)
+        print("*" * 40)
+        print("*", f"{self.name}")
+        print("*", f" - get_col: {rv}")
+        print("*" * 40)
+        return rv
+
+    def add_to_query(self, qs: m.QuerySet[_T_Model], alias=None, select=True):
+        rv = super().add_to_query(qs, alias, select)
+        print("*" * 40)
+        print("*", f"{self.name}")
+        print("*", f" - expression = {self.final_expression}")
+        print("*" * 40)
+        return rv

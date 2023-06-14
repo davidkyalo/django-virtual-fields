@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from collections import abc
-from functools import cached_property, partial
+from functools import cached_property, partial, wraps
 from typing import TYPE_CHECKING, ClassVar, TypeVar
 
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models as m
 from django.db.models.options import Options
 from django.db.models.query import QuerySet
+from django.db.models.sql import query as sql
 from typing_extensions import Self
 
 if TYPE_CHECKING:
@@ -86,27 +87,15 @@ def _patcher(*a, **kw):
 def _patch_model_options():
     patch = _patcher(cls=Options)
 
-    # @patch
-    # def get_virtual_field(self: ModelOptions, name: str):
-    #     try:
-    #         return self.virtual_fields[name]
-    #     except KeyError:
-    #         raise FieldDoesNotExist(f"{name}")
-
     @patch(wrap=cached_property)
     def virtual_fields(self: ModelOptions):
         from .fields import VirtualField
 
-        # qs = self.virtual_fields_queryset
-        by_attname = {}
-        fields = {}  # _FieldMap((), by_attname)
+        fields = {}
         for field in self.get_fields():
             if isinstance(field, VirtualField):
-                name, attname = field.name, getattr(field, "attname", None)
-                # if attname and name != attname:
-                #     by_attname[attname] = field
+                name = field.name
                 fields[name] = field
-                # qs.query.add_annotation(field.final_expression, name, field.concrete)
         return fields
 
     @patch(wrap=cached_property)
@@ -133,3 +122,43 @@ if not hasattr(QuerySet, "select_virtual"):
         return qs
 
     QuerySet.select_virtual = select_virtual
+
+    def alias_virtual(self: QuerySet[_T_Model], *fields) -> QuerySet[_T_Model]:
+        opts, qs = self.model._meta, self._chain()
+        allowed = opts.virtual_fields
+        for name in fields:
+            qs = allowed[name].add_to_query(qs, select=False)
+        return qs
+
+    QuerySet.alias_virtual = alias_virtual
+
+    def filter_virtual(
+        self: QuerySet[_T_Model], /, *fields, **lookups
+    ) -> QuerySet[_T_Model]:
+        opts, qs = self.model._meta, self._chain()
+        allowed = opts.virtual_fields
+        for name in fields:
+            qs = allowed[name].add_to_query(qs)
+        return qs
+
+    QuerySet.select_virtual = select_virtual
+
+
+if not hasattr(_orig_Query_get_col := sql.Query._get_col, "_supports_virtual_fields_"):
+
+    @wraps(_orig_Query_get_col)
+    def _get_col(self: sql.Query, target, field, alias):
+        from .fields import VirtualField
+
+        rv = _orig_Query_get_col(self, target, field, alias)
+        if isinstance(target, VirtualField):
+            print("+" * 40)
+            print("+", f"{target.name}")
+            print("+", f" - Query_get_col = {rv}")
+            print("+" * 40)
+
+        return rv
+
+    _get_col._supports_virtual_fields_ = True
+
+    sql.Query._get_col = _get_col

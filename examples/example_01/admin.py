@@ -56,22 +56,43 @@ class PersonAdmin(admin.ModelAdmin):
     ordering = ["age", "name"]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
-        return super().get_queryset(request).select_virtual("name", "bmi_cat")
+        return super().get_queryset(request)  # .select_virtual("name", "bmi_cat")
 
 
 class PostAdmin(admin.ModelAdmin):
     list_display = [
         "id",
         "title",
-        "author",
+        # "author",
         "published_at",
         "created_at",
-        "parent",
+        "parent_id",
     ]
 
     search_fields = [
         "title",
-        "author__full_name",
+        "authored_by",
+    ]
+    fields = [
+        "id",
+        "title",
+        "type",
+        "authored_by",
+        "author_dob",
+        "published_at",
+        "created_at",
+        "content",
+        "data",
+        # "parent",
+        # "author",
+        # "likes",
+    ]
+
+    readonly_fields = [
+        "id",
+        "created_at",
+        "authored_by",
+        "author_dob",
     ]
 
 

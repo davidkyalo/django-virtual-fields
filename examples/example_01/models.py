@@ -13,7 +13,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 
 from examples.faker import faker, ufaker
-from virtual_fields import VirtualField
+from virtual_fields import RelatedVirtualField, VirtualField
 
 if t.TYPE_CHECKING:
     from typing_extensions import Self
@@ -72,10 +72,10 @@ class Person(m.Model):
         verbose_name="body mass index",
     )
 
-    bmi_cat = VirtualField(defer=True)
+    bmi_cat = VirtualField()
 
     @bmi_cat.expression
-    def bmi_cat(cls):
+    def bmi_cat_expr(cls):
         return m.Case(
             m.When(bmi__lt=18.5, then=m.Value("Underweight")),
             m.When(bmi__lt=25, then=m.Value("Normal weight")),
@@ -135,7 +135,9 @@ class PostType(m.TextChoices):
 
 class PostManager(m.Manager):
     def get_queryset(self) -> QuerySet:
-        return super().get_queryset().select_related("author")
+        return (
+            super().get_queryset()  # .alias_virtual("authored_by")
+        )  # .annotate(authored_by_ann=m.F("author__first_name"))  # .select_related("author")
 
 
 class Post(m.Model):
@@ -159,7 +161,8 @@ class Post(m.Model):
 
     children: "m.manager.RelatedManager[Post]"
 
-    # authored_by = VirtualField[m.CharField]("author__full_name", defer=True)
+    authored_by = RelatedVirtualField[m.CharField]("author__first_name")
+    author_dob = RelatedVirtualField[m.CharField]("author__dob")
 
     # @authored_by.expression
     # def authored_by_expr(cls):
