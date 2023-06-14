@@ -144,21 +144,21 @@ if not hasattr(QuerySet, "select_virtual"):
     QuerySet.select_virtual = select_virtual
 
 
-if not hasattr(_orig_Query_get_col := sql.Query._get_col, "_supports_virtual_fields_"):
+# if not hasattr(_orig_Query_get_col := sql.Query._get_col, "_supports_virtual_fields_"):
 
-    @wraps(_orig_Query_get_col)
-    def _get_col(self: sql.Query, target, field, alias):
-        from .fields import VirtualField
+#     @wraps(_orig_Query_get_col)
+#     def _get_col(self: sql.Query, target, field, alias):
+#         from .fields import VirtualField
 
-        rv = _orig_Query_get_col(self, target, field, alias)
-        if isinstance(target, VirtualField):
-            print("+" * 40)
-            print("+", f"{target.name}")
-            print("+", f" - Query_get_col = {rv}")
-            print("+" * 40)
+#         rv = _orig_Query_get_col(self, target, field, alias)
+#         if isinstance(target, VirtualField):
+#             print("+" * 40)
+#             print("+", f"{target.name}")
+#             print("+", f" - Query_get_col = {rv}")
+#             print("+" * 40)
 
-        return rv
+#         return rv
 
-    _get_col._supports_virtual_fields_ = True
+#     _get_col._supports_virtual_fields_ = True
 
-    sql.Query._get_col = _get_col
+#     sql.Query._get_col = _get_col

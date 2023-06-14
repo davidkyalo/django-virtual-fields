@@ -513,18 +513,18 @@ class RelatedVirtualField(VirtualField[_T_Field]):
     #     # for expr
     #     # return (self.source_expressions)
 
-    def get_col(self, alias, output_field=None):
-        rv = super().get_col(alias, output_field)
-        print("*" * 40)
-        print("*", f"{self.name}")
-        print("*", f" - get_col: {rv}")
-        print("*" * 40)
-        return rv
+    # def get_col(self, alias, output_field=None):
+    #     rv = super().get_col(alias, output_field)
+    #     print("*" * 40)
+    #     print("*", f"{self.name}")
+    #     print("*", f" - get_col: {rv}")
+    #     print("*" * 40)
+    #     return rv
 
-    def add_to_query(self, qs: m.QuerySet[_T_Model], alias=None, select=True):
-        rv = super().add_to_query(qs, alias, select)
-        print("*" * 40)
-        print("*", f"{self.name}")
-        print("*", f" - expression = {self.final_expression}")
-        print("*" * 40)
-        return rv
+    # def add_to_query(self, qs: m.QuerySet[_T_Model], alias=None, select=True):
+    #     rv = super().add_to_query(qs, alias, select)
+    #     print("*" * 40)
+    #     print("*", f"{self.name}")
+    #     print("*", f" - expression = {self.final_expression}")
+    #     print("*" * 40)
+    #     return rv
