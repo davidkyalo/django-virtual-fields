@@ -173,7 +173,6 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
             cls.source_fixture = source_fixture
         super().__init_subclass__()
 
-    # @pyt.mark.skip("")
     def test_basic(self, model: type[TestModel], field: type[_FT]):
         test, proxy = t.cast(
             list[type[VirtualField]],
@@ -184,7 +183,6 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
         assert isinstance(proxy.output_field, field)
         # assert isinstance(proxy.get_internal_field(), field)
 
-    # @pyt.mark.skip("NOT SETUP")
     def test_direct_access(self, factory: T_Func[_VT], model: type[TestModel]):
         qs: m.QuerySet[model] = model.objects.all()
         val_0, val_1 = factory(), factory()
@@ -221,7 +219,7 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
 
     @pyt.mark.skip("NOT SETUP")
     @pyt.mark.parametrize("through", ["foreignkey", "onetoonefield"])
-    def test_fk_access(self, through, factory: T_Func[_VT], model: type[_MT]):
+    def _test_fk_access(self, through, factory: T_Func[_VT], model: type[_MT]):
         qs = model.objects.all()
 
         val_0, val_1 = factory(), factory()
@@ -266,7 +264,7 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
 
     @pyt.mark.skip("NOT SETUP")
     @pyt.mark.parametrize("through", ["manytomanyfield"])
-    def test_m2m_access(self, through, factory: T_Func[_VT], model: type[_MT]):
+    def _test_m2m_access(self, through, factory: T_Func[_VT], model: type[_MT]):
         qs = model.objects.all()
 
         val_0, val_1 = factory(), factory()
@@ -372,14 +370,14 @@ TDateTypeField = m.DateField | m.DateTimeField | m.TimeField | m.DurationField
 
 class test_DateTypesFields(FieldTestCase[str, TDateTypeField, TestModel]):
     json_source_kwargs = {m.Field: dict(cast=True)}
-    all_sources = (Src.FIELD, Src.EVAL)
+    source_support = DefaultDict({(Src.JSON, m.DurationField): False}, True)
 
 
 class test_JSONField(FieldTestCase[dict, m.JSONField, TestModel]):
     pass
 
 
-@pyt.mark.skip("")
+@pyt.mark.skip("NOT SETUP")
 class test_ForeignKey(FieldTestCase[bool, m.ForeignKey | m.OneToOneField, TestModel]):
     @pyt.fixture
     def factory(self, model: type[_MT]):
@@ -398,7 +396,3 @@ class test_ForeignKey(FieldTestCase[bool, m.ForeignKey | m.OneToOneField, TestMo
     @pyt.fixture
     def def_kwargs(self, def_kwargs, field, kwargs):
         return {**def_kwargs, "proxy": VirtualField[field]("test", **kwargs)}
-
-    # @pyt.mark.skip("")
-    # def test_basic(self, model: type[TestModel], field: type[_FT]):
-    #     ...
