@@ -402,7 +402,6 @@ class VirtualField(m.Field, Generic[_T_Field]):
     def contribute_to_class(self, cls, name, private_only=None):
         super().contribute_to_class(cls, name, private_only is not False)
         _add_virtual_field_support(cls)
-        # self.column or setattr(cls, self.attname, self.descriptor_class(self))
         assert isinstance(getattr(cls, self.attname), self.descriptor_class)
 
     def set_attributes_from_name(self, name):
