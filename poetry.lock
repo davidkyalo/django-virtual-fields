@@ -353,6 +353,25 @@ files = [
 ]
 
 [[package]]
+name = "devtools"
+version = "0.11.0"
+description = "Python's missing debug print command, and more."
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "devtools-0.11.0-py3-none-any.whl", hash = "sha256:22a3b65b58713ccd7e8586feffdefaad57bbdbc6ff76bd68ecf3150a00cf41e3"},
+    {file = "devtools-0.11.0.tar.gz", hash = "sha256:4a6d987dfab0c7513a514e7faf0a71296d220423470204e76e0752d146dfad62"},
+]
+
+[package.dependencies]
+asttokens = ">=2.0.0,<3.0.0"
+executing = ">=1.1.1"
+
+[package.extras]
+pygments = ["pygments (>=2.2.0)"]
+
+[[package]]
 name = "distlib"
 version = "0.3.6"
 description = "Distribution utilities"
@@ -1620,4 +1639,4 @@ typing-extensions = ">=4.4.0,<5.0.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4.0"
-content-hash = "16ffb74b5b875b3175da6cf5022a48a17784cfd62559bd2808c58841bf4c441b"
+content-hash = "06edd6aaccba6d467b8522bf68dd63cf16ec08f7eadf41447c1e6c248ac92329"

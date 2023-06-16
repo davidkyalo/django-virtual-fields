@@ -13,7 +13,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 
 from examples.faker import faker, ufaker
-from virtual_fields import RelatedVirtualField, VirtualField
+from virtual_fields import ForeignVirtualField, VirtualField
 
 if t.TYPE_CHECKING:
     from typing_extensions import Self
@@ -135,15 +135,17 @@ class PostType(m.TextChoices):
 
 class PostManager(m.Manager):
     def get_queryset(self) -> QuerySet:
-        return (
-            super().get_queryset()  # .alias_virtual("authored_by")
-        )  # .annotate(authored_by_ann=m.F("author__first_name"))  # .select_related("author")
+        qs = super().get_queryset()
+        if (pt := getattr(self.model, "_post_type_", None)) is not None:
+            qs = qs.filter(type=pt)
+        return qs  # .alias_virtual("authored_by")  # .annotate(authored_by_ann=m.F("author__first_name"))  # .select_related("author")
 
 
 class Post(m.Model):
     class Meta:
         default_manager_name = "objects"
 
+    _post_type_ = None
     objects = PostManager()
     title: str = m.CharField(max_length=255)
     content: str = m.TextField()
@@ -160,9 +162,11 @@ class Post(m.Model):
     )
 
     children: "m.manager.RelatedManager[Post]"
-
-    authored_by = RelatedVirtualField[m.CharField]("author__first_name")
-    author_dob = RelatedVirtualField[m.CharField]("author__dob")
+    posted_by = VirtualField("author")
+    authored_by = ForeignVirtualField[m.CharField]("author__full_name")
+    author_dob = ForeignVirtualField[m.CharField]("author__dob")
+    num_likes = ForeignVirtualField(m.Count("likes"))
+    num_comments = ForeignVirtualField(m.Count("children"))
 
     # @authored_by.expression
     # def authored_by_expr(cls):

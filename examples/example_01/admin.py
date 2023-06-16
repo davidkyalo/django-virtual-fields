@@ -64,6 +64,8 @@ class PostAdmin(admin.ModelAdmin):
         "id",
         "title",
         # "author",
+        "author_dob",
+        "authored_by",
         "published_at",
         "created_at",
         "parent_id",
@@ -79,6 +81,8 @@ class PostAdmin(admin.ModelAdmin):
         "type",
         "authored_by",
         "author_dob",
+        "num_likes",
+        "num_comments",
         "published_at",
         "created_at",
         "content",
@@ -93,12 +97,15 @@ class PostAdmin(admin.ModelAdmin):
         "created_at",
         "authored_by",
         "author_dob",
+        "num_likes",
+        "num_comments",
     ]
 
 
 @admin.register(Article)
 class ArticleAdmin(PostAdmin):
-    pass
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
+        return super().get_queryset(request).filter()
 
 
 @admin.register(Comment)

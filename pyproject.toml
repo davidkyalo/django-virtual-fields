@@ -38,6 +38,7 @@ tox = "^4.4.8"
 psycopg = "^3.1.8"
 mysqlclient = "^2.1.1"
 django-debug-toolbar = "^4.1.0"
+devtools = "^0.11.0"
 
 
 [tool.poetry.group.test]

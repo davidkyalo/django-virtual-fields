@@ -1,3 +1,4 @@
+import inspect
 from collections import abc
 from functools import reduce
 from logging import getLogger
@@ -29,6 +30,7 @@ from django.db.models.expressions import (
     Value,
 )
 from django.db.models.functions import Cast, Coalesce
+from django.db.models.query_utils import PathInfo
 from django.dispatch import receiver
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
@@ -86,7 +88,7 @@ def _attrsetter_decorator(name: str, typ: type = Any, *, call=False):
 
 
 def _db_instance_qs(obj: _T_Model, using=None, *, filter=True):
-    man = obj.__class__._meta.base_manager
+    man = (obj.__class__ if isinstance(obj, m.Model) else obj)._meta.base_manager
     qs: m.Manager[_T_Model] = man.db_manager(using, hints={"instance": obj})
     return qs.all() if filter is False else qs.filter(pk=obj.pk)
 
@@ -101,11 +103,11 @@ def coalesced(expr: _T_Expr, /, *exprs: _T_Expr):
     )
 
 
-class FieldPathInfo(NamedTuple):
-    path: list
+class FieldPath(NamedTuple):
+    info: list[PathInfo]
     field: _T_Field
-    targets: tuple = ()
-    name: tuple[str] = ()
+    targets: tuple[_T_Field, ...] = ()
+    name: list[str] = ()
     src: "VirtualField" = None
 
 
@@ -481,26 +483,28 @@ class VirtualField(m.Field, Generic[_T_Field]):
         raw = self.raw_expression
         return (f if isinstance(f, F) else None for f in raw.flatten())
 
-    def __get_source_fields(
+    def _iter_source_field_paths(
         self, *, recursive=None, src: "VirtualField" = None
     ):  # pragma: no cover
         f: _T_Field | VirtualField
+        raw = self.raw_expression
         opts, qs, deep = self.model._meta, self._queryset, recursive is not False
         to_path = qs.query.names_to_path.__get__(qs.query)
 
-        for expr in filter(None, self.__get_flat_source_expressions()):
-            if expr is None:
+        for expr in raw.flatten():
+            if not isinstance(expr, F):
+                print("xxx", f"{opts.label}:{self.name}", expr, "", sep=" --- ")
                 yield None
             else:
                 path = to_path(expr.name.split(LOOKUP_SEP), opts)
-                info = FieldPathInfo(*path, src=src)
+                info = FieldPath(*path, src=src)
                 if deep is True is hasattr(f := info.field, "get_source_fields"):
-                    yield from f.__get_source_fields(recursive=recursive, src=self)
+                    yield from f._iter_source_field_paths(recursive=recursive, src=self)
                 else:
                     yield info
 
 
-class RelatedVirtualField(VirtualField[_T_Field]):
+class ForeignVirtualField(VirtualField[_T_Field]):
     defer = True
     # is_relation = True
 
@@ -513,18 +517,56 @@ class RelatedVirtualField(VirtualField[_T_Field]):
     #     # for expr
     #     # return (self.source_expressions)
 
-    # def get_col(self, alias, output_field=None):
-    #     rv = super().get_col(alias, output_field)
-    #     print("*" * 40)
-    #     print("*", f"{self.name}")
-    #     print("*", f" - get_col: {rv}")
-    #     print("*" * 40)
-    #     return rv
+    # @property
+    # def is_relation(self):
+    #     return True
+
+    # @is_relation.setter
+    # def is_relation(self, val):
+    #     pass
+
+    @cached_property
+    def has_joins(self):
+        for path in filter(None, self._iter_source_field_paths()):
+            if path.info or (path.field and path.field.is_relation):
+                return True
+        return False
+
+    def get_col(self, alias, output_field=None):
+        Query = self._queryset.query.__class__
+
+        # print("*" * 60)
+        # print("*", f"{self.name}")
+        # print("*", f"{alias =}, {output_field =}")
+
+        f_locals, fi, query, rv = None, None, None, None
+        try:
+            if self.has_joins:
+                # for fi in inspect.stack()[:4]:
+                #     print("*", f"--> {fi.filename}:{fi.lineno} {fi.function}`")
+                # print("*")
+                for fi in inspect.stack()[1:2]:
+                    f_locals = fi.frame.f_locals
+                    if isinstance(query := f_locals.get("self"), Query):
+                        if self.name not in query.annotations:
+                            rv = self.final_expression.resolve_expression(query)
+            if rv is None:
+                rv = super().get_col(alias, output_field)
+
+            # print("*", f"- return: {rv}")
+            # print("*" * 60, "\n ")
+
+            # raise ValueError(self)
+            return rv
+
+        finally:
+            del f_locals, fi, query, rv
 
     # def add_to_query(self, qs: m.QuerySet[_T_Model], alias=None, select=True):
     #     rv = super().add_to_query(qs, alias, select)
     #     print("*" * 40)
     #     print("*", f"{self.name}")
+    #     print("*", f" - {self.has_joins =}")
     #     print("*", f" - expression = {self.final_expression}")
     #     print("*" * 40)
     #     return rv
