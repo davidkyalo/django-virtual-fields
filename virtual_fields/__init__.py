@@ -1,7 +1,6 @@
 from . import _compat  # type: ignore
-from .fields import ForeignVirtualField, VirtualField
+from .fields import VirtualField
 
 __all__ = [
     "VirtualField",
-    "ForeignVirtualField",
 ]

@@ -172,7 +172,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
     description = _("A virtual field. Uses query annotations to return computed value.")
     expressions: m.expressions.Combinable | m.Q | str
     empty_strings_allowed = False
-    defer: bool = False
+    defer: bool = True
     cache: bool | None
     concrete: bool | None
     model: _T_Model
@@ -344,10 +344,6 @@ class VirtualField(m.Field, Generic[_T_Field]):
         return (None, None, None) == (self.fget, self.fset, self.fdel)
 
     @cached_property
-    def defer(self):
-        return self.fget is not None
-
-    @cached_property
     def output_field(self) -> _T_Field:
         return self._output_field or self.source_output_field
 
@@ -389,8 +385,30 @@ class VirtualField(m.Field, Generic[_T_Field]):
         fget, fset, fdel = self.get_fget(), self.get_fset(), self.get_fdel()
         return self._define_descriptor_class(fget, fset, fdel, cached=self.cache)
 
+    @cached_property
+    def has_joins(self):
+        for path in filter(None, self._iter_source_field_paths()):
+            if path.info or (path.field and path.field.is_relation):
+                return True
+        return False
+
     def get_col(self, alias, output_field=None):
-        return self.cached_col
+        if not self.has_joins:
+            return self.cached_col
+
+        Query = self._queryset.query.__class__
+        f_locals, fi, query, rv = None, None, None, None
+        try:
+            for fi in inspect.stack()[1:2]:
+                f_locals = fi.frame.f_locals
+                if isinstance(query := f_locals.get("self"), Query):
+                    if self.name not in query.annotations:
+                        rv = self.final_expression.resolve_expression(query)
+            if rv is None:
+                rv = self.cached_col
+            return rv
+        finally:
+            del f_locals, fi, query, rv
 
     def get_internal_type(self):  # pragma: no cover
         return "VirtualField"
@@ -414,8 +432,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
         self.expressions = expressions
 
     def add_to_query(self, qs: m.QuerySet[_T_Model], alias=None, select=True):
-        name = self.name
-        qs.query.add_annotation(self.final_expression, alias or name, select)
+        qs.query.add_annotation(self.final_expression, alias or self.name, select)
         return qs
 
     def get_queryset_for_object(self, obj: _T_Model):
@@ -479,13 +496,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
                 else:
                     yield Value(v)
 
-    def __get_flat_source_expressions(self):  # pragma: no cover
-        raw = self.raw_expression
-        return (f if isinstance(f, F) else None for f in raw.flatten())
-
-    def _iter_source_field_paths(
-        self, *, recursive=None, src: "VirtualField" = None
-    ):  # pragma: no cover
+    def _iter_source_field_paths(self, *, recursive=None, src: "VirtualField" = None):
         f: _T_Field | VirtualField
         raw = self.raw_expression
         opts, qs, deep = self.model._meta, self._queryset, recursive is not False
@@ -493,7 +504,6 @@ class VirtualField(m.Field, Generic[_T_Field]):
 
         for expr in raw.flatten():
             if not isinstance(expr, F):
-                print("xxx", f"{opts.label}:{self.name}", expr, "", sep=" --- ")
                 yield None
             else:
                 path = to_path(expr.name.split(LOOKUP_SEP), opts)
@@ -502,71 +512,3 @@ class VirtualField(m.Field, Generic[_T_Field]):
                     yield from f._iter_source_field_paths(recursive=recursive, src=self)
                 else:
                     yield info
-
-
-class ForeignVirtualField(VirtualField[_T_Field]):
-    defer = True
-    # is_relation = True
-
-    # @cached_property
-    # def related_field(self):
-    #     print("*" * 40)
-    #     print("*", f"{self.name}")
-    #     print("*", f" - get_col: {rv}")
-    #     print("*" * 40)
-    #     # for expr
-    #     # return (self.source_expressions)
-
-    # @property
-    # def is_relation(self):
-    #     return True
-
-    # @is_relation.setter
-    # def is_relation(self, val):
-    #     pass
-
-    @cached_property
-    def has_joins(self):
-        for path in filter(None, self._iter_source_field_paths()):
-            if path.info or (path.field and path.field.is_relation):
-                return True
-        return False
-
-    def get_col(self, alias, output_field=None):
-        Query = self._queryset.query.__class__
-
-        # print("*" * 60)
-        # print("*", f"{self.name}")
-        # print("*", f"{alias =}, {output_field =}")
-
-        f_locals, fi, query, rv = None, None, None, None
-        try:
-            if self.has_joins:
-                # for fi in inspect.stack()[:4]:
-                #     print("*", f"--> {fi.filename}:{fi.lineno} {fi.function}`")
-                # print("*")
-                for fi in inspect.stack()[1:2]:
-                    f_locals = fi.frame.f_locals
-                    if isinstance(query := f_locals.get("self"), Query):
-                        if self.name not in query.annotations:
-                            rv = self.final_expression.resolve_expression(query)
-            if rv is None:
-                rv = super().get_col(alias, output_field)
-
-            # print("*", f"- return: {rv}")
-            # print("*" * 60, "\n ")
-
-            # raise ValueError(self)
-            return rv
-
-        finally:
-            del f_locals, fi, query, rv
-
-    # def add_to_query(self, qs: m.QuerySet[_T_Model], alias=None, select=True):
-    #     rv = super().add_to_query(qs, alias, select)
-    #     print("*" * 40)
-    #     print("*", f"{self.name}")
-    #     print("*", f" - {self.has_joins =}")
-    #     print("*", f" - expression = {self.final_expression}")
-    #     print("*" * 40)
-    #     return rv

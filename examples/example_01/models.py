@@ -13,7 +13,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 
 from examples.faker import faker, ufaker
-from virtual_fields import ForeignVirtualField, VirtualField
+from virtual_fields import VirtualField
 
 if t.TYPE_CHECKING:
     from typing_extensions import Self
@@ -38,10 +38,12 @@ class Person(m.Model):
     data = m.JSONField(encoder=JSONEncoder, blank=True, default=_fake_data)
 
     full_name: str = VirtualField[m.CharField](
-        Concat("first_name", m.Value(" "), "last_name")
+        Concat("first_name", m.Value(" "), "last_name"), defer=False
     )
-    yob: int = VirtualField("dob__year", verbose_name="year of birth")
-    age: int = VirtualField[m.IntegerField](Extract(Now(), "year") - m.F("yob"))
+    yob: int = VirtualField("dob__year", defer=False, verbose_name="year of birth")
+    age: int = VirtualField[m.IntegerField](
+        Extract(Now(), "year") - m.F("yob"), defer=False
+    )
 
     name = VirtualField("full_name", m.Value(""), cache=False)
 
@@ -58,13 +60,13 @@ class Person(m.Model):
         pass
 
     country = VirtualField[m.CharField](
-        KT("data__country"), default=ufaker.country, defer=True, editable=True
+        KT("data__country"), default=ufaker.country, defer=False, editable=True
     )
-    city = VirtualField[m.CharField](KT("data__city"), defer=True, editable=True)
+    city = VirtualField[m.CharField](KT("data__city"), editable=True)
     height = VirtualField[m.DecimalField](
-        KT("data__height"), decimal_places=2, max_digits=8, cast=True
+        KT("data__height"), decimal_places=2, max_digits=8, defer=False, cast=True
     )
-    weight = VirtualField[m.IntegerField]("data__weight", cast=True)
+    weight = VirtualField[m.IntegerField]("data__weight", cast=True, defer=False)
     bmi = VirtualField(
         m.F("weight") / m.functions.Power(m.F("height"), 2),
         output_field=m.DecimalField(max_digits=12, decimal_places=3),
@@ -72,7 +74,7 @@ class Person(m.Model):
         verbose_name="body mass index",
     )
 
-    bmi_cat = VirtualField()
+    bmi_cat = VirtualField(defer=False)
 
     @bmi_cat.expression
     def bmi_cat_expr(cls):
@@ -163,10 +165,10 @@ class Post(m.Model):
 
     children: "m.manager.RelatedManager[Post]"
     posted_by = VirtualField("author")
-    authored_by = ForeignVirtualField[m.CharField]("author__full_name")
-    author_dob = ForeignVirtualField[m.CharField]("author__dob")
-    num_likes = ForeignVirtualField(m.Count("likes"))
-    num_comments = ForeignVirtualField(m.Count("children"))
+    authored_by = VirtualField[m.CharField]("author__full_name")
+    author_dob = VirtualField[m.CharField]("author__dob")
+    num_likes = VirtualField(m.Count("likes"))
+    num_comments = VirtualField(m.Count("children"))
 
     # @authored_by.expression
     # def authored_by_expr(cls):
