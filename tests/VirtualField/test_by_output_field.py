@@ -265,18 +265,19 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
         for rel, expected in ((rel_0, val_1), (rel_1, val_0)):
             assert rel.value == expected
 
-        print("*" * 50)
         obj_0.refresh_from_db(), obj_1.refresh_from_db()
-        print("*" * 50)
 
         # Test the swapped values
         for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
             assert obj.test == expected
             assert obj.proxy == expected
 
-    @pyt.mark.skip("NOT SETUP")
+    # @pyt.mark.skip("NOT SETUP")
     @pyt.mark.parametrize("through", ["manytomanyfield"])
-    def _test_m2m_access(self, through, factory: T_Func[_VT], model: type[_MT]):
+    def test_m2m_access(self, through, factory: T_Func[_VT], model: type[_MT], source):
+        if source == Src.JSON:
+            pyt.skip("NOT YET SETUP")
+
         qs = model.objects.all()
 
         val_0, val_1 = factory(), factory()
@@ -299,9 +300,9 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
             t_obj, p_obj = qs.get(test=expected), qs.get(proxy=expected)
             assert (
                 (obj.pk, expected)
-                == qs.annotate("test").values_list("pk", "test").get(test=expected)
+                == qs.values_list("pk", "test").get(test=expected)
                 == (t_obj.pk, t_obj.test)
-                == qs.annotate("proxy").values_list("pk", "proxy").get(proxy=expected)
+                == qs.values_list("pk", "proxy").get(proxy=expected)
                 == (p_obj.pk, p_obj.proxy)
             )
 
