@@ -37,13 +37,13 @@ jobs:
             python -m pip install --upgrade pip
             python -m pip install tox tox-gh-actions
       - name: Test - run tox
-        run: tox p -- --cov-append --cov-report xml
+        run: tox r -- --cov-append --cov-report xml
         env:
             PLATFORM: ${{ matrix.platform }}
             TOX_SKIP_ENV: .*(darwin|win32).*-(mysql|pgsql).*
             DATABASES: mysql=mysql://root:root@localhost/test_db;pgsql=postgres://root:root@localhost/test_db;sqlite=sqlite:////tmp/test-sqlite.db
       - name: Upload code coverage
-        if: matrix.platform == 'ubuntu-latest'
+        if: matrix.platform == 'ubuntu-latest' ## && github.ref == 'refs/heads/master'
         uses: codecov/codecov-action@v3
         with:
             token: ${{ secrets.CODECOV_TOKEN }}
