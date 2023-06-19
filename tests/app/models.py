@@ -223,7 +223,7 @@ class TestModel(FieldModel):
         dct = {
             "__module__": __name__,
             "__name__": name,
-            "proxy": VirtualField("test", defer=True, default=None)
+            "proxy": VirtualField("test", defer=True)
             if isinstance(dct.get("test"), m.Field)
             else None,
             **dct,
