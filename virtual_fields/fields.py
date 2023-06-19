@@ -1,5 +1,6 @@
 import inspect
 from collections import abc
+from enum import Enum
 from functools import reduce
 from logging import getLogger
 from operator import methodcaller, or_
@@ -31,13 +32,18 @@ from django.db.models.expressions import (
 )
 from django.db.models.functions import Cast, Coalesce
 from django.db.models.query_utils import PathInfo
+from django.db.models.sql.compiler import SQLCompiler
+from django.db.models.sql.query import Query
 from django.dispatch import receiver
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 from typing_extensions import Self
 
+from ._compat import add_virtual_field_support
+from ._util import _db_instance_qs
+
 if TYPE_CHECKING:
-    from ._compat import Model
+    from .models import VirtualizedModel
 
 __all__ = [
     "VirtualField",
@@ -50,31 +56,8 @@ _T_Fn = abc.Callable[..., Any]
 
 logger = getLogger(__name__)
 
-_virtual_field_models = set()
 
 DEFERRED = models_mod.DEFERRED
-
-
-def _add_virtual_field_support(model: type[_T_Model]):
-    if not (model in _virtual_field_models or model._meta.abstract):
-        _virtual_field_models.add(model)
-        m.signals.post_save.connect(_post_save_receiver, model, weak=False)
-
-    return model
-
-
-@receiver(m.signals.class_prepared, weak=False)
-def __on_class_prepared(sender: type[_T_Model], **kwds):
-    if sender not in _virtual_field_models:
-        bases = {*sender.__mro__[1:-1]}
-        (bases & _virtual_field_models) and _add_virtual_field_support(sender)
-
-
-def _post_save_receiver(sender, instance: _T_Model, **kwargs):
-    dct = instance.__dict__
-    for n, f in instance.__class__._meta.cached_virtual_fields.items():
-        if (at := f.attname) in dct:
-            delattr(instance, at)
 
 
 def _attrsetter_decorator(name: str, typ: type = Any, *, call=False):
@@ -87,12 +70,6 @@ def _attrsetter_decorator(name: str, typ: type = Any, *, call=False):
     return decorator
 
 
-def _db_instance_qs(obj: _T_Model, using=None, *, filter=True):
-    man = (obj.__class__ if isinstance(obj, m.Model) else obj)._meta.base_manager
-    qs: m.Manager[_T_Model] = man.db_manager(using, hints={"instance": obj})
-    return qs.all() if filter is False else qs.filter(pk=obj.pk)
-
-
 def coalesced(expr: _T_Expr, /, *exprs: _T_Expr):
     return (
         Coalesce(expr, *exprs)
@@ -101,6 +78,12 @@ def coalesced(expr: _T_Expr, /, *exprs: _T_Expr):
         if isinstance(expr, Expression)
         else ExpressionWrapper(expr, None)
     )
+
+
+class Behaviour(str, Enum):
+    NOOP = "NOOP"
+    DELETE = "DELETE"
+    RELOAD = "RELOAD"
 
 
 class FieldPath(NamedTuple):
@@ -169,6 +152,12 @@ class VirtualFieldDescriptor:
 
 
 class VirtualField(m.Field, Generic[_T_Field]):
+    vars().update(Behaviour.__members__)
+    if TYPE_CHECKING:
+        NOOP: Final[Behaviour] = ...
+        DELETE: Final[Behaviour] = ...
+        RELOAD: Final[Behaviour] = ...
+
     description = _("A virtual field. Uses query annotations to return computed value.")
     expressions: m.expressions.Combinable | m.Q | str
     empty_strings_allowed = False
@@ -197,6 +186,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
     _output_kwargs_: ClassVar = None
     _init_defaults_ = {
         # "null": True,
+        "default": DEFERRED,
         "editable": False,
         "serialize": False,
     }
@@ -340,6 +330,32 @@ class VirtualField(m.Field, Generic[_T_Field]):
     expression = _attrsetter_decorator("set_source_expressions", _T_Fn, call=True)
 
     @cached_property
+    def on_model_add(self):
+        return self.on_model_save
+
+    @cached_property
+    def on_model_save(self):
+        cache, defer, computable = self.cache, self.defer, self.is_computable
+        match (cache, defer, computable or self.has_joins):
+            case (True, _, True):
+                return self.DELETE
+            case (True, True, _):
+                return self.DELETE
+            case (True, False, _):
+                return self.RELOAD
+        return self.NOOP
+
+    @cached_property
+    def on_model_refresh(self):
+        cache, defer, computable = self.cache, self.defer, self.is_computable
+        match (cache, defer, computable):
+            case (True, _, True):
+                return self.DELETE
+            case (True, True, _):
+                return self.DELETE
+        return self.NOOP
+
+    @cached_property
     def cache(self):
         return (None, None, None) == (self.fget, self.fset, self.fdel)
 
@@ -392,23 +408,27 @@ class VirtualField(m.Field, Generic[_T_Field]):
                 return True
         return False
 
+    @cached_property
+    def is_computable(self) -> bool:
+        return self.fget is not None
+
     def get_col(self, alias, output_field=None):
         if not self.has_joins:
             return self.cached_col
 
-        Query = self._queryset.query.__class__
-        f_locals, fi, query, rv = None, None, None, None
+        call = query = this = None
         try:
-            for fi in inspect.stack()[1:2]:
-                f_locals = fi.frame.f_locals
-                if isinstance(query := f_locals.get("self"), Query):
-                    if self.name not in query.annotations:
-                        rv = self.final_expression.resolve_expression(query)
-            if rv is None:
-                rv = self.cached_col
-            return rv
+            call = (inspect.stack()[1:2] or (None,))[0]
+            if not (hasattr(call, "frame") and hasattr(call.frame, "f_locals")):
+                pass
+            elif (this := call.frame.f_locals.get("self")) is not None:
+                query = this.query if isinstance(this, SQLCompiler) else this
+                if isinstance(query, Query) and self.name not in query.annotations:
+                    return self.final_expression.resolve_expression(query)
         finally:
-            del f_locals, fi, query, rv
+            del call, query, this
+
+        return self.cached_col
 
     def get_internal_type(self):  # pragma: no cover
         return "VirtualField"
@@ -420,8 +440,11 @@ class VirtualField(m.Field, Generic[_T_Field]):
         return self.output_field.formfield(**kwargs)
 
     def contribute_to_class(self, cls, name, private_only=None):
+        from .models import ImplementsVirtualFields, VirtualizedModel
+
         super().contribute_to_class(cls, name, private_only is not False)
-        _add_virtual_field_support(cls)
+
+        add_virtual_field_support(cls)
         assert isinstance(getattr(cls, self.attname), self.descriptor_class)
 
     def set_attributes_from_name(self, name):
@@ -508,7 +531,7 @@ class VirtualField(m.Field, Generic[_T_Field]):
             else:
                 path = to_path(expr.name.split(LOOKUP_SEP), opts)
                 info = FieldPath(*path, src=src)
-                if deep is True is hasattr(f := info.field, "get_source_fields"):
+                if deep is True is hasattr(f := info.field, "_iter_source_field_paths"):
                     yield from f._iter_source_field_paths(recursive=recursive, src=self)
                 else:
                     yield info

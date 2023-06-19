@@ -1,4 +1,7 @@
-from . import _compat  # type: ignore
+from . import _compat
+
+_compat._install()
+
 from .fields import VirtualField
 
 __all__ = [
