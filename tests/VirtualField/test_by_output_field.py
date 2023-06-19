@@ -49,7 +49,7 @@ def expression(field_name: str, through: str, field: m.Field, source: Src):
     match source:
         case Src.JSON:
             exp = f"{through}json__{field_name}"
-            return exp if issubclass(field, JSONField) else KT(exp)
+            return exp if through or issubclass(field, JSONField) else KT(exp)
         case Src.EVAL:
             return m.Case(
                 m.When(
@@ -126,7 +126,7 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
     all_sources: t.ClassVar = (Src.FIELD, Src.EVAL, Src.JSON)
     source_support: t.ClassVar = DefaultDict[type[_FT], bool]((), True)
     fixture: pyt.FixtureRequest
-    default_kwargs: dict = ReadonlyDict()
+    default_kwargs: dict = ReadonlyDict(defer=False)
     default_source_kwargs: dict = ReadonlyDict()
     json_source_kwargs: dict = ReadonlyDict()
     field_source_kwargs: dict = ReadonlyDict()
@@ -217,9 +217,18 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
             assert obj.test == expected
             assert obj.proxy == expected
 
-    @pyt.mark.skip("NOT SETUP")
+        obj_0.refresh_from_db(), obj_1.refresh_from_db()
+        # Test the swapped values
+        for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
+            assert obj.test == expected
+            assert obj.proxy == expected
+
+    # @pyt.mark.skip("NOT SETUP")
     @pyt.mark.parametrize("through", ["foreignkey", "onetoonefield"])
-    def _test_fk_access(self, through, factory: T_Func[_VT], model: type[_MT]):
+    def test_fk_access(self, through, factory: T_Func[_VT], model: type[_MT], source):
+        if source == Src.JSON:
+            pyt.skip("NOT YET SETUP")
+
         qs = model.objects.all()
 
         val_0, val_1 = factory(), factory()
@@ -237,12 +246,13 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
 
         # Test query return values
         for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
-            t_obj, p_obj = qs.get(test=expected), qs.get(proxy=expected)
+            t_obj = qs.get(test=expected)
+            p_obj = qs.get(proxy=expected)
             assert (
                 (obj.pk, expected)
-                == qs.annotate("test").values_list("pk", "test").get(test=expected)
+                == qs.values_list("pk", "test").get(test=expected)
                 == (t_obj.pk, t_obj.test)
-                == qs.annotate("proxy").values_list("pk", "proxy").get(proxy=expected)
+                == qs.values_list("pk", "proxy").get(proxy=expected)
                 == (p_obj.pk, p_obj.proxy)
             )
 
@@ -255,7 +265,9 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
         for rel, expected in ((rel_0, val_1), (rel_1, val_0)):
             assert rel.value == expected
 
+        print("*" * 50)
         obj_0.refresh_from_db(), obj_1.refresh_from_db()
+        print("*" * 50)
 
         # Test the swapped values
         for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
