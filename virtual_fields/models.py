@@ -167,22 +167,20 @@ class ImplementsVirtualFields(ABC, m.Model if TYPE_CHECKING else object):
             nonlocal _orig
             adding = self._state.adding
             _orig(self, raw, force_insert, force_update, using, update_fields)
-            if raw:
-                return
+            if not raw:
+                opts, attrs = self._meta, self.__dict__
 
-            opts, attrs = self._meta, self.__dict__
+                if adding:
+                    deletes = opts.virtual_fields_to_delete_on_add
+                    reloads = opts.virtual_fields_to_reload_on_add
+                else:
+                    deletes = opts.virtual_fields_to_delete_on_save
+                    reloads = opts.virtual_fields_to_reload_on_save
 
-            if adding:
-                deletes = opts.virtual_fields_to_delete_on_add
-                reloads = opts.virtual_fields_to_reload_on_add
-            else:
-                deletes = opts.virtual_fields_to_delete_on_save
-                reloads = opts.virtual_fields_to_reload_on_save
+                for field in deletes:
+                    field in attrs and delattr(self, field)
 
-            for field in deletes:
-                field in attrs and delattr(self, field)
-
-            reloads and self.refresh_from_db(self._state.db, list(reloads))
+                reloads and self.refresh_from_db(self._state.db, list(reloads))
 
         cls.save_base = self._set_support_marker(impl)
 
