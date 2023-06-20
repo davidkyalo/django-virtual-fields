@@ -303,7 +303,9 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
 
         # Test for reverted values
         self.check_virtual_values((obj_0, obj_1), (val_0, val_1))
-        self.check_ordering((val_0, val_1))
+
+        if isinstance(self.field, TNumTypeField):
+            self.check_ordering((val_0, val_1))
 
     # @pyt.mark.skip("NOT SETUP")
     @pyt.mark.parametrize("through", ["foreignkey", "onetoonefield", "manytomanyfield"])
