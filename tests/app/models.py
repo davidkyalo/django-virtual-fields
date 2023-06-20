@@ -114,6 +114,10 @@ class TestModel(FieldModel):
 
     class Meta:
         verbose_name = "Field Implementation"
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+
+    objects = m.Manager[Self]()
 
     NONE = ExprSource.NONE
     FIELD = ExprSource.FIELD
