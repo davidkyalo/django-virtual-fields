@@ -1,15 +1,21 @@
 import typing as t
+from collections.abc import Iterable
+from functools import reduce
+from operator import eq, or_
 from types import UnionType
 from uuid import UUID
 
 import pytest as pyt
 from django.db import models as m
 from django.db.models.fields.json import KT, JSONField
+from django.db.models.query import QuerySet
 from zana.types.collections import DefaultDict, ReadonlyDict
 
 from tests.app.models import ExprSource as Src
 from tests.app.models import T_Func, TestModel
 from virtual_fields import VirtualField
+from virtual_fields._util import _db_instance_qs
+from virtual_fields.models import ImplementsVirtualFields
 
 _VT = t.TypeVar("_VT", covariant=True)
 _FT = t.TypeVar("_FT", bound=m.Field, covariant=True)
@@ -44,22 +50,30 @@ def through():
 
 
 @pyt.fixture
-def expression(field_name: str, through: str, field: m.Field, source: Src):
-    through = f"{through}__".lstrip("_")
+def src_field_alias(through: str, source: Src):
+    if through and source == Src.JSON:
+        return "json_alias"
+
+
+@pyt.fixture
+def expression(
+    field_name: str, through: str, field: m.Field, source: Src, src_field_alias
+):
+    prefix = f"{through}__".lstrip("_")
     match source:
         case Src.JSON:
-            exp = f"{through}json__{field_name}"
-            return exp if through or issubclass(field, JSONField) else KT(exp)
+            exp = f"{src_field_alias or f'{prefix}json'}__{field_name}"
+            return exp if issubclass(field, JSONField) else KT(exp)
         case Src.EVAL:
             return m.Case(
                 m.When(
-                    m.Q(**{f"{through}{field_name}__isnull": False}),
-                    then=m.F(f"{through}{field_name}"),
+                    m.Q(**{f"{prefix}{field_name}__isnull": False}),
+                    then=m.F(f"{prefix}{field_name}"),
                 ),
                 default=m.Value(None),
             )
         case _:
-            return f"{through}{field_name}"
+            return f"{prefix}{field_name}"
 
 
 @pyt.fixture
@@ -74,7 +88,10 @@ def cls(source: Src, field, type_var):
 
 
 @pyt.fixture
-def def_kwargs():
+def def_kwargs(src_field_alias, through: str, source: Src):
+    if src_field_alias:
+        kwds = {src_field_alias: VirtualField(f"{through}__json", defer=True)}
+        return kwds
     return {}
 
 
@@ -98,20 +115,20 @@ def new(cls: type[VirtualField], expression, kwargs: dict):
 
 
 @pyt.fixture
-def model(define: T_Func[type[VirtualField]]):
+def model(define: T_Func[type[m.Model]]):
     return define()
 
 
 @pyt.fixture
-def kwargs(request: pyt.FixtureRequest, field, source):
+def kwargs(request: pyt.FixtureRequest, field: type[m.Field], source):
     self: FieldTestCase = request.instance
-    skw = getattr(self, f"{source}_source_kwargs".lower(), {})
+    skw = getattr(self, f"{source!s}_source_kwargs".lower(), {})
+    ftk = self.field_type_kwargs
+    mro = field.__mro__[::-1]
     return {
         **self.default_kwargs,
-        **self.default_source_kwargs.get(m.Field, {}),
-        **self.default_source_kwargs.get(field, {}),
-        **skw.get(m.Field, {}),
-        **skw.get(field, {}),
+        **reduce(or_, (ftk.get(b, {}) for b in mro), {}),
+        **reduce(or_, (skw.get(b, {}) for b in mro), {}),
     }
 
 
@@ -127,12 +144,14 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
     source_support: t.ClassVar = DefaultDict[type[_FT], bool]((), True)
     fixture: pyt.FixtureRequest
     default_kwargs: dict = ReadonlyDict(defer=False)
-    default_source_kwargs: dict = ReadonlyDict()
+    field_type_kwargs: dict = ReadonlyDict()
     json_source_kwargs: dict = ReadonlyDict()
-    field_source_kwargs: dict = ReadonlyDict()
+    # field_source_kwargs: dict = ReadonlyDict()
 
     source: Src
     field: type[_FT]
+    model: type[_MT]
+    request: pyt.FixtureRequest
 
     def __init_subclass__(cls) -> None:
         if ob := cls.__orig_bases__:
@@ -173,154 +192,153 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
             cls.source_fixture = source_fixture
         super().__init_subclass__()
 
-    def test_basic(self, model: type[TestModel], field: type[_FT]):
+    @pyt.fixture(name="_setup_fixture", autouse=True)
+    def __setup_fixture(self, request, model, field, source):
+        self.request, self.model, self.field, self.source = (
+            request,
+            model,
+            field,
+            source,
+        )
+
+    def check_field_setup(self, model: type[TestModel], field: type[_FT]):
         test, proxy = t.cast(
             list[type[VirtualField]],
             [model.get_field("test"), model.get_field("proxy")],
         )
-        # Ensure the field type automatically maps
         assert isinstance(test.output_field, field)
         assert isinstance(proxy.output_field, field)
-        # assert isinstance(proxy.get_internal_field(), field)
 
-    def test_direct_access(self, factory: T_Func[_VT], model: type[TestModel]):
+    def update_db_values(self, objs: Iterable[_MT], vals: Iterable[_VT]):
+        return self.update_obj_values((_db_instance_qs(o).get() for o in objs), vals)
+
+    def update_obj_values(self, objs: Iterable[_MT], vals: Iterable[_VT]):
+        for obj, expected in zip(objs, vals):
+            obj.value = expected
+            obj.save()
+
+    def check_virtual_values(self, objs: Iterable[_MT], vals: Iterable[_VT], *, op=eq):
+        for obj, expected in zip(objs, vals):
+            for val in (obj.test, obj.proxy):
+                assert op(expected, val)
+
+    def check_real_values(self, objs: Iterable[_MT], vals: Iterable[_VT], *, op=eq):
+        for obj, expected in zip(objs, vals):
+            assert op(obj.value, expected)
+
+    def check_query_results(
+        self, objs: Iterable[_MT], vals: Iterable[_VT], qs: m.QuerySet[_MT] = None
+    ):
+        # Test query return values
+        vals = tuple(vals)
+        if qs is None:
+            qs = self.model.objects.all()
+        for sub, val in zip(objs, vals):
+            oqs = qs.filter(pk=sub.pk)
+            obj_by_pk = oqs.get()
+
+            obj_only = oqs.only("pk", "test", "proxy").get()
+            obj_values = oqs.values_list("pk", "test", "proxy", named=True).get()
+
+            for obj in (obj_by_pk, obj_only, obj_values):
+                assert (sub.pk, val, val) == (obj.pk, obj.test, obj.proxy)
+
+            if vals.count(val) == 1:
+                pk_by_test = qs.filter(test=val).values_list("pk", flat=True).get()
+                pk_by_proxy = qs.filter(proxy=val).values_list("pk", flat=True).get()
+                assert pk_by_test == pk_by_proxy == sub.pk
+
+    def check_ordering(self, values: Iterable[_VT], qs: m.QuerySet[_MT] = None):
+        if qs is None:
+            qs = self.model.objects.all()
+
+        vals = list(values)
+
+        try:
+            assert len(dict.fromkeys(vals)) == len(vals)
+            vals.sort()
+        except (TypeError, ValueError):
+            return
+        else:
+            t_qs, p_qs = qs.order_by("test"), qs.order_by("proxy")
+            t_res = list(t_qs.values_list("test", flat=True))
+            p_res = list(p_qs.values_list("proxy", flat=True))
+            assert vals == t_res == p_res
+
+            t_qs, p_qs = qs.order_by("-test"), qs.order_by("-proxy")
+            t_res = list(t_qs.values_list("test", flat=True))
+            p_res = list(p_qs.values_list("proxy", flat=True))
+            assert vals[::-1] == t_res == p_res
+
+    def test_basic(
+        self, factory: T_Func[_VT], model: type[TestModel], field: type[_FT]
+    ):
+        self.check_field_setup(model, field)
+
         qs: m.QuerySet[model] = model.objects.all()
         val_0, val_1 = factory(), factory()
         obj_0, obj_1 = (qs.create(value=v) for v in (val_0, val_1))
         sql = str(qs.query)
-        # obj_0.refresh_from_db(), obj_1.refresh_from_db()
-        # Test the values of each object
-        for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
-            assert obj.value == expected
-            assert obj.test == expected
-            assert obj.proxy == expected
 
-        # Test query return values
-        for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
-            t_obj, p_obj = qs.get(test=expected), qs.get(proxy=expected)
-            assert (
-                (obj.pk, expected)
-                == qs.values_list("pk", "test").get(test=expected)
-                == (t_obj.pk, t_obj.test)
-                == qs.values_list("pk", "proxy").get(proxy=expected)
-                == (p_obj.pk, p_obj.proxy)
-            )
+        self.check_real_values((obj_0, obj_1), (val_0, val_1))
+        self.check_virtual_values((obj_0, obj_1), (val_0, val_1))
 
-        # swap values of the 2 objects and refresh
-        for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
-            obj.value = expected
-            obj.save()
+        self.check_query_results((obj_0, obj_1), (val_0, val_1))
 
-        # Test the swapped values
-        for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
-            assert obj.value == expected
-            assert obj.test == expected
-            assert obj.proxy == expected
+        # swap values of the 2 objects
+        self.update_obj_values((obj_0, obj_1), (val_1, val_0))
 
+        # Test swapped values
+        self.check_real_values((obj_0, obj_1), (val_1, val_0))
+        self.check_virtual_values((obj_0, obj_1), (val_1, val_0))
+
+        # Revert the values in the database.
+        self.update_db_values((obj_0, obj_1), (val_0, val_1))
+
+        # Ensure object values not yet reverted
+        self.check_virtual_values((obj_0, obj_1), (val_1, val_0))
+
+        # Refresh to get new values
         obj_0.refresh_from_db(), obj_1.refresh_from_db()
-        # Test the swapped values
-        for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
-            assert obj.test == expected
-            assert obj.proxy == expected
+
+        # Test for reverted values
+        self.check_virtual_values((obj_0, obj_1), (val_0, val_1))
+        self.check_ordering((val_0, val_1))
 
     # @pyt.mark.skip("NOT SETUP")
-    @pyt.mark.parametrize("through", ["foreignkey", "onetoonefield"])
-    def test_fk_access(self, through, factory: T_Func[_VT], model: type[_MT], source):
-        if source == Src.JSON:
-            pyt.skip("NOT YET SETUP")
-
+    @pyt.mark.parametrize("through", ["foreignkey", "onetoonefield", "manytomanyfield"])
+    def test_thourgh_related(
+        self, through, factory: T_Func[_VT], model: type[_MT], source
+    ):
         qs = model.objects.all()
 
         val_0, val_1 = factory(), factory()
         rel_0, rel_1 = (qs.create(value=v) for v in (val_0, val_1))
-        obj_0, obj_1 = (qs.create(**{through: r}) for r in (rel_0, rel_1))
+        if through == "manytomanyfield":
+            obj_0, obj_1 = (
+                r.manytomanyfield.add(o := qs.create()) or o for r in (rel_0, rel_1)
+            )
+        else:
+            obj_0, obj_1 = (qs.create(**{through: r}) for r in (rel_0, rel_1))
 
         # Test the related (real) values of each object
-        for rel, expected in ((rel_0, val_0), (rel_1, val_1)):
-            assert rel.value == expected
+        self.check_real_values((rel_0, rel_1), (val_0, val_1))
 
-        # Test the values of each object
-        for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
-            assert obj.test == expected
-            assert obj.proxy == expected
+        self.check_virtual_values((obj_0, obj_1), (val_0, val_1))
 
-        # Test query return values
-        for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
-            t_obj = qs.get(test=expected)
-            p_obj = qs.get(proxy=expected)
-            assert (
-                (obj.pk, expected)
-                == qs.values_list("pk", "test").get(test=expected)
-                == (t_obj.pk, t_obj.test)
-                == qs.values_list("pk", "proxy").get(proxy=expected)
-                == (p_obj.pk, p_obj.proxy)
-            )
+        self.check_query_results((obj_0, obj_1), (val_0, val_1))
 
-        # swap values of the 2 objects and refresh
-        for obj, expected in ((rel_0, val_1), (rel_1, val_0)):
-            obj.value = expected
-            obj.save()
+        # swap values of the 2 objects
+        self.update_obj_values((rel_0, rel_1), (val_1, val_0))
 
-        # Test the swapped related (real) values of each object
-        for rel, expected in ((rel_0, val_1), (rel_1, val_0)):
-            assert rel.value == expected
+        self.check_real_values((rel_0, rel_1), (val_1, val_0))
 
         obj_0.refresh_from_db(), obj_1.refresh_from_db()
 
         # Test the swapped values
-        for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
-            assert obj.test == expected
-            assert obj.proxy == expected
-
-    # @pyt.mark.skip("NOT SETUP")
-    @pyt.mark.parametrize("through", ["manytomanyfield"])
-    def test_m2m_access(self, through, factory: T_Func[_VT], model: type[_MT], source):
-        if source == Src.JSON:
-            pyt.skip("NOT YET SETUP")
-
-        qs = model.objects.all()
-
-        val_0, val_1 = factory(), factory()
-        rel_0, rel_1 = (qs.create(value=v) for v in (val_0, val_1))
-        obj_0, obj_1 = (
-            r.manytomanyfield.add(o := qs.create()) or o for r in (rel_0, rel_1)
-        )
-
-        # Test the related (real) values of each object
-        for rel, expected in ((rel_0, val_0), (rel_1, val_1)):
-            assert rel.value == expected
-
-        # Test the values of each object
-        for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
-            assert obj.test == expected
-            assert obj.proxy == expected
-
-        # Test query return values
-        for obj, expected in ((obj_0, val_0), (obj_1, val_1)):
-            t_obj, p_obj = qs.get(test=expected), qs.get(proxy=expected)
-            assert (
-                (obj.pk, expected)
-                == qs.values_list("pk", "test").get(test=expected)
-                == (t_obj.pk, t_obj.test)
-                == qs.values_list("pk", "proxy").get(proxy=expected)
-                == (p_obj.pk, p_obj.proxy)
-            )
-
-        # swap values of the 2 objects and refresh
-        for obj, expected in ((rel_0, val_1), (rel_1, val_0)):
-            obj.value = expected
-            obj.save()
-
-        # Test the swapped related (real) values of each object
-        for rel, expected in ((rel_0, val_1), (rel_1, val_0)):
-            assert rel.value == expected
-
-        obj_0.refresh_from_db(), obj_1.refresh_from_db()
-
-        # Test the swapped values
-        for obj, expected in ((obj_0, val_1), (obj_1, val_0)):
-            assert obj.test == expected
-            assert obj.proxy == expected
+        self.check_virtual_values((obj_0, obj_1), (val_1, val_0))
+        if isinstance(self.field, TNumTypeField):
+            self.check_ordering((val_0, val_1), qs.exclude(pk__in=(rel_0.pk, rel_1.pk)))
 
 
 TStrField = (
@@ -352,7 +370,7 @@ TNumTypeField = (
 
 class test_NumberFields(FieldTestCase[str, TNumTypeField, TestModel]):
     json_source_kwargs = {m.Field: dict(cast=True)}
-    default_source_kwargs = {
+    field_type_kwargs = {
         m.DecimalField: dict(decimal_places=6, max_digits=54),
     }
 
