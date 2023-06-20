@@ -201,6 +201,10 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
             source,
         )
 
+    @property
+    def can_be_ordered(self) -> None:
+        return isinstance(self.field, TNumTypeField | TDateTypeField | m.BooleanField)
+
     def check_field_setup(self, model: type[TestModel], field: type[_FT]):
         test, proxy = t.cast(
             list[type[VirtualField]],
@@ -304,8 +308,7 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
         # Test for reverted values
         self.check_virtual_values((obj_0, obj_1), (val_0, val_1))
 
-        if isinstance(self.field, TNumTypeField):
-            self.check_ordering((val_0, val_1))
+        self.can_be_ordered and self.check_ordering((val_0, val_1))
 
     # @pyt.mark.skip("NOT SETUP")
     @pyt.mark.parametrize("through", ["foreignkey", "onetoonefield", "manytomanyfield"])
@@ -339,7 +342,8 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
 
         # Test the swapped values
         self.check_virtual_values((obj_0, obj_1), (val_1, val_0))
-        if isinstance(self.field, TNumTypeField):
+
+        if self.can_be_ordered:
             self.check_ordering((val_0, val_1), qs.exclude(pk__in=(rel_0.pk, rel_1.pk)))
 
 
