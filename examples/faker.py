@@ -76,6 +76,10 @@ class ExtraProvider(BaseProvider):
         g = self.generator
         return g.time_delta(g.date_time() if end_datetime is None else end_datetime)
 
+    # def full_name(self, end_datetime=None):
+    #     g = self.generator
+    #     return g.time_delta(g.date_time() if end_datetime is None else end_datetime)
+
 
 class _FakerUnique(t.Protocol):
     unique: Self | UniqueProxy

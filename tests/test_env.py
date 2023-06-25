@@ -48,7 +48,7 @@ def test_check_py_version(skip_if_not_tox, tox_env_name: str):
 
 
 def test_check_db_vendor(tox_env_name: str, settings):
-    from tests.app import settings as mod_settings
+    from tests.test_virtual_fields import settings as mod_settings
 
     v_map = {"sqlite": "sqlite3", "pgsql": "postgresql", "mysql": "mysql"}
     aka = {"psycopg2": "pgsql", "psycopg3": "pgsql"}

@@ -34,7 +34,6 @@ from django.db.models.functions import Cast, Coalesce
 from django.db.models.query_utils import PathInfo
 from django.db.models.sql.compiler import SQLCompiler
 from django.db.models.sql.query import Query
-from django.dispatch import receiver
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 from typing_extensions import Self
@@ -50,7 +49,7 @@ __all__ = [
 ]
 
 _T_Field = TypeVar("_T_Field", bound=m.Field, covariant=True)
-_T_Model = TypeVar("_T_Model", bound="Model", covariant=True)
+_T_Model = TypeVar("_T_Model", bound="VirtualizedModel", covariant=True)
 _T_Expr = TypeVar("_T_Expr", Combinable, m.Q)
 _T_Fn = abc.Callable[..., Any]
 
@@ -151,7 +150,18 @@ class VirtualFieldDescriptor:
     get_default = None
 
 
-class VirtualField(m.Field, Generic[_T_Field]):
+
+class AbstractVirtualField(m.Field):
+
+    def __class_getitem__(cls, params):
+        return cls
+
+    def contribute_to_class(self, cls, name, private_only=None, **kwds):
+        super().contribute_to_class(cls, name, private_only is not False, **kwds)
+
+
+
+class VirtualField(AbstractVirtualField, Generic[_T_Field]):
     vars().update(Behaviour.__members__)
     if TYPE_CHECKING:
         NOOP: Final[Behaviour] = ...
@@ -439,10 +449,8 @@ class VirtualField(m.Field, Generic[_T_Field]):
     def formfield(self, **kwargs):
         return self.output_field.formfield(**kwargs)
 
-    def contribute_to_class(self, cls, name, private_only=None):
-        from .models import ImplementsVirtualFields, VirtualizedModel
-
-        super().contribute_to_class(cls, name, private_only is not False)
+    def contribute_to_class(self, cls, *args, **kwds):
+        super().contribute_to_class(cls,*args, **kwds)
 
         add_virtual_field_support(cls)
         assert isinstance(getattr(cls, self.attname), self.descriptor_class)
@@ -535,3 +543,5 @@ class VirtualField(m.Field, Generic[_T_Field]):
                     yield from f._iter_source_field_paths(recursive=recursive, src=self)
                 else:
                     yield info
+
+

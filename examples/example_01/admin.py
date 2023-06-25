@@ -13,6 +13,7 @@ from .models import Article, Comment, Person, Post
 class PersonAdmin(admin.ModelAdmin):
     list_display = [
         "id",
+        "slug",
         "full_name",
         "city",
         # "country",
@@ -63,8 +64,9 @@ class PostAdmin(admin.ModelAdmin):
     list_display = [
         "id",
         "title",
+        "slug",
         # "author",
-        "author_dob",
+        # "author_dob",
         "authored_by",
         "published_at",
         "created_at",
@@ -78,6 +80,7 @@ class PostAdmin(admin.ModelAdmin):
     fields = [
         "id",
         "title",
+        "slug",
         "type",
         "authored_by",
         "author_dob",
@@ -94,6 +97,7 @@ class PostAdmin(admin.ModelAdmin):
 
     readonly_fields = [
         "id",
+        "slug",
         "created_at",
         "authored_by",
         "author_dob",
@@ -104,6 +108,38 @@ class PostAdmin(admin.ModelAdmin):
 
 @admin.register(Article)
 class ArticleAdmin(PostAdmin):
+    list_display = [
+        "id",
+        "title",
+        "writer",
+        "slug",
+        "writer_slug",
+        # "author_dob",
+        "authored_by",
+        "published_at",
+        "created_at",
+        "parent_id",
+    ]
+    list_select_related = ["writer"]
+
+    fields = [
+        "id",
+        "title",
+        "writer",
+        "writer_slug",
+        "slug",
+        "type",
+        # "authored_by",
+        # "author_dob",
+        # "num_likes",
+        # "num_comments",
+        "published_at",
+        "created_at",
+        "content",
+        "data",
+    ]
+    readonly_fields = PostAdmin.readonly_fields + ["writer", "writer_slug"]
+
     def get_queryset(self, request: HttpRequest) -> QuerySet[Any]:
         return super().get_queryset(request).filter()
 
@@ -111,3 +147,14 @@ class ArticleAdmin(PostAdmin):
 @admin.register(Comment)
 class CommentAdmin(PostAdmin):
     pass
+
+
+# for i, (pk, title) in enumerate(qs.values_list("pk", "title").all()):
+#     if qs.filter(pk=pk).update(slug=slugify(title)):
+#         print(f"{i:04} Ok ...")
+#     else:
+#         print(f"{i:04} Err ...")
+
+# for _ in range(1):
+#     [Article.create() for _ in range(5)]
+#     [Comment.create() for _ in range(20)]

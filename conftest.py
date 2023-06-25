@@ -40,7 +40,7 @@ def ufaker(faker):
 
 @pyt.fixture()
 def factories():
-    from tests.app.fields import FIELD_FACTORIES
+    from tests.test_virtual_fields.fields import FIELD_FACTORIES
 
     return FIELD_FACTORIES
 
@@ -77,8 +77,8 @@ _cov_marker_tests = set()
 
 @pyt.fixture(scope="session")
 def implementations():
-    # from tests.app.fields import get_field_data_type
-    from tests.app.models import ExprSource, FieldModel
+    # from tests.test_virtual_fields.fields import get_field_data_type
+    from tests.test_virtual_fields.models import ExprSource, FieldModel
 
     meta = FieldModel._meta
     iall = {*ExprSource}
@@ -96,7 +96,7 @@ def implementations():
 def coverage_tasks(
     implementations: dict[type["m.Field"], set[str]], request: pyt.FixtureRequest
 ):
-    from tests.app.models import TestModel
+    from tests.test_virtual_fields.models import FieldModel
 
     tasks = {
         (test, cov, impl)
@@ -112,7 +112,7 @@ def coverage_tasks(
     rem = len(tasks)
 
     for test, spec, impl in sorted(
-        tasks, key=lambda v: (*v[:-1], TestModel.get_field_name(v[-1]))
+        tasks, key=lambda v: (*v[:-1], FieldModel.get_field_name(v[-1]))
     ):
         logger.error(
             f"{test}[{str(spec)!r}] '{impl.__module__}::{impl.__qualname__}' not covered"
@@ -130,7 +130,7 @@ def node_key(item: pyt.Item):
 
 
 def pytest_collection_modifyitems(config, items: list[pyt.Function]):
-    from tests.app.models import ExprSource
+    from tests.test_virtual_fields.models import ExprSource
 
     for i in range(len(items)):
         item = items[i]

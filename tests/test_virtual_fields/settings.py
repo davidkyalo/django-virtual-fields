@@ -139,7 +139,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     *(["debug_toolbar"] if debug_toolbar else []),
     "virtual_fields",
-    "tests.app",
+    "tests.test_virtual_fields",
     "examples",
     "examples.example_01",
 ]

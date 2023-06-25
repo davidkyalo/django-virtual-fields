@@ -11,15 +11,15 @@ from django.db.models.fields.json import KT, JSONField
 from django.db.models.query import QuerySet
 from zana.types.collections import DefaultDict, ReadonlyDict
 
-from tests.app.models import ExprSource as Src
-from tests.app.models import T_Func, TestModel
+from tests.test_virtual_fields.models import ExprSource as Src
+from tests.test_virtual_fields.models import FieldModel, T_Func
 from virtual_fields import VirtualField
 from virtual_fields._util import _db_instance_qs
 from virtual_fields.models import ImplementsVirtualFields
 
 _VT = t.TypeVar("_VT", covariant=True)
 _FT = t.TypeVar("_FT", bound=m.Field, covariant=True)
-_MT = t.TypeVar("_MT", bound=TestModel, covariant=True)
+_MT = t.TypeVar("_MT", bound=FieldModel, covariant=True)
 
 
 _TF_Target = t.Literal["field", "json"]
@@ -29,94 +29,94 @@ pytestmark = [
 ]
 
 
-@pyt.fixture
-def to_python(field):
-    return TestModel.get_field(field, m.Field()).to_python
+# @pyt.fixture
+# def to_python(field):
+#     return TestModel.get_field(field, m.Field()).to_python
 
 
-@pyt.fixture
-def factory(factories, field):
-    return factories[field]
+# @pyt.fixture
+# def factory(factories, field):
+#     return factories[field]
 
 
-@pyt.fixture
-def field_name(field: type):
-    return TestModel.get_field_name(field)
+# @pyt.fixture
+# def field_name(field: type):
+#     return TestModel.get_field_name(field)
 
 
-@pyt.fixture
-def through():
-    return ""
+# @pyt.fixture
+# def through():
+#     return ""
 
 
-@pyt.fixture
-def src_field_alias(through: str, source: Src):
-    if through and source == Src.JSON:
-        return "json_alias"
+# @pyt.fixture
+# def src_field_alias(through: str, source: Src):
+#     if through and source == Src.JSON:
+#         return "json_alias"
 
 
-@pyt.fixture
-def expression(
-    field_name: str, through: str, field: m.Field, source: Src, src_field_alias
-):
-    prefix = f"{through}__".lstrip("_")
-    match source:
-        case Src.JSON:
-            exp = f"{src_field_alias or f'{prefix}json'}__{field_name}"
-            return exp if issubclass(field, JSONField) else KT(exp)
-        case Src.EVAL:
-            return m.Case(
-                m.When(
-                    m.Q(**{f"{prefix}{field_name}__isnull": False}),
-                    then=m.F(f"{prefix}{field_name}"),
-                ),
-                default=m.Value(None),
-            )
-        case _:
-            return f"{prefix}{field_name}"
+# @pyt.fixture
+# def expression(
+#     field_name: str, through: str, field: m.Field, source: Src, src_field_alias
+# ):
+#     prefix = f"{through}__".lstrip("_")
+#     match source:
+#         case Src.JSON:
+#             exp = f"{src_field_alias or f'{prefix}json'}__{field_name}"
+#             return exp if issubclass(field, JSONField) else KT(exp)
+#         case Src.EVAL:
+#             return m.Case(
+#                 m.When(
+#                     m.Q(**{f"{prefix}{field_name}__isnull": False}),
+#                     then=m.F(f"{prefix}{field_name}"),
+#                 ),
+#                 default=m.Value(None),
+#             )
+#         case _:
+#             return f"{prefix}{field_name}"
 
 
-@pyt.fixture
-def type_var(source: Src, field):
-    if source == Src.JSON:
-        return field
+# @pyt.fixture
+# def type_var(source: Src, field):
+#     if source == Src.JSON:
+#         return field
 
 
-@pyt.fixture
-def cls(source: Src, field, type_var):
-    return VirtualField[type_var] if type_var is not None else VirtualField
+# @pyt.fixture
+# def cls(source: Src, field, type_var):
+#     return VirtualField[type_var] if type_var is not None else VirtualField
 
 
-@pyt.fixture
-def def_kwargs(src_field_alias, through: str, source: Src):
-    if src_field_alias:
-        kwds = {src_field_alias: VirtualField(f"{through}__json", defer=True)}
-        return kwds
-    return {}
+# @pyt.fixture
+# def def_kwargs(src_field_alias, through: str, source: Src):
+#     if src_field_alias:
+#         kwds = {src_field_alias: VirtualField(f"{through}__json", defer=True)}
+#         return kwds
+#     return {}
 
 
-@pyt.fixture
-def define(source: Src, field, new, def_kwargs):
-    def_kwargs = {"source": source, "field_type": field, **def_kwargs}
+# @pyt.fixture
+# def define(source: Src, field, new, def_kwargs):
+#     def_kwargs = {"source": source, "field_type": field, **def_kwargs}
 
-    def func(test=def_kwargs.pop("test", None), **kw):
-        test = new() if test is None else test
-        return TestModel.define(test=test, **def_kwargs | kw)
+#     def func(test=def_kwargs.pop("test", None), **kw):
+#         test = new() if test is None else test
+#         return TestModel.define(test=test, **def_kwargs | kw)
 
-    return func
-
-
-@pyt.fixture
-def new(cls: type[VirtualField], expression, kwargs: dict):
-    def func(expression=expression, **kw):
-        return cls(expression, **kwargs | kw)
-
-    return func
+#     return func
 
 
-@pyt.fixture
-def model(define: T_Func[type[m.Model]]):
-    return define()
+# @pyt.fixture
+# def new(cls: type[VirtualField], expression, kwargs: dict):
+#     def func(expression=expression, **kw):
+#         return cls(expression, **kwargs | kw)
+
+#     return func
+
+
+# @pyt.fixture
+# def model(define: T_Func[type[m.Model]]):
+#     return define()
 
 
 @pyt.fixture
@@ -205,7 +205,7 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
     def can_be_ordered(self) -> None:
         return isinstance(self.field, TNumTypeField | TDateTypeField | m.BooleanField)
 
-    def check_field_setup(self, model: type[TestModel], field: type[_FT]):
+    def check_field_setup(self, model: type[FieldModel], field: type[_FT]):
         test, proxy = t.cast(
             list[type[VirtualField]],
             [model.get_field("test"), model.get_field("proxy")],
@@ -275,7 +275,7 @@ class FieldTestCase(t.Generic[_VT, _FT, _MT]):
             assert vals[::-1] == t_res == p_res
 
     def test_basic(
-        self, factory: T_Func[_VT], model: type[TestModel], field: type[_FT]
+        self, factory: T_Func[_VT], model: type[FieldModel], field: type[_FT]
     ):
         self.check_field_setup(model, field)
 
@@ -358,7 +358,7 @@ TStrField = (
 )
 
 
-class test_StrFields(FieldTestCase[str, TStrField, TestModel]):
+class test_StrFields(FieldTestCase[str, TStrField, FieldModel]):
     pass
 
 
@@ -374,7 +374,7 @@ TNumTypeField = (
 )
 
 
-class test_NumberFields(FieldTestCase[str, TNumTypeField, TestModel]):
+class test_NumberFields(FieldTestCase[str, TNumTypeField, FieldModel]):
     json_source_kwargs = {m.Field: dict(cast=True)}
     field_type_kwargs = {
         m.DecimalField: dict(decimal_places=6, max_digits=54),
@@ -382,40 +382,40 @@ class test_NumberFields(FieldTestCase[str, TNumTypeField, TestModel]):
 
 
 class test_GenericIPAddressField(
-    FieldTestCase[str, m.GenericIPAddressField, TestModel]
+    FieldTestCase[str, m.GenericIPAddressField, FieldModel]
 ):
     json_source_kwargs = {m.Field: dict(cast=True)}
 
 
-class test_BooleanField(FieldTestCase[bool, m.BooleanField, TestModel]):
+class test_BooleanField(FieldTestCase[bool, m.BooleanField, FieldModel]):
     json_source_kwargs = {m.Field: dict(cast=True)}
     pass
 
 
-class test_UUIDField(FieldTestCase[UUID, m.UUIDField, TestModel]):
+class test_UUIDField(FieldTestCase[UUID, m.UUIDField, FieldModel]):
     # all_sources = (Src.FIELD, Src.EVAL)
     json_source_kwargs = {m.Field: dict(cast=True)}
     pass
 
 
-class test_BinaryField(FieldTestCase[str, m.BinaryField, TestModel]):
+class test_BinaryField(FieldTestCase[str, m.BinaryField, FieldModel]):
     all_sources = (Src.FIELD, Src.EVAL)
 
 
 TDateTypeField = m.DateField | m.DateTimeField | m.TimeField | m.DurationField
 
 
-class test_DateTypesFields(FieldTestCase[str, TDateTypeField, TestModel]):
+class test_DateTypesFields(FieldTestCase[str, TDateTypeField, FieldModel]):
     json_source_kwargs = {m.Field: dict(cast=True)}
     source_support = DefaultDict({(Src.JSON, m.DurationField): False}, True)
 
 
-class test_JSONField(FieldTestCase[dict, m.JSONField, TestModel]):
+class test_JSONField(FieldTestCase[dict, m.JSONField, FieldModel]):
     pass
 
 
 @pyt.mark.skip("NOT SETUP")
-class test_ForeignKey(FieldTestCase[bool, m.ForeignKey | m.OneToOneField, TestModel]):
+class test_ForeignKey(FieldTestCase[bool, m.ForeignKey | m.OneToOneField, FieldModel]):
     @pyt.fixture
     def factory(self, model: type[_MT]):
         return lambda *a, **kw: model.objects.create(*a, **kw)

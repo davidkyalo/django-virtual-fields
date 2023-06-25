@@ -1,4 +1,5 @@
 import datetime
+import re
 import typing as t
 from decimal import Decimal
 from operator import attrgetter
@@ -13,7 +14,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 
 from examples.faker import faker, ufaker
-from virtual_fields import VirtualField
+from virtual_fields import VirtualField, VirtualForeignKey
 
 if t.TYPE_CHECKING:
     from typing_extensions import Self
@@ -23,11 +24,16 @@ class JSONEncoder(DjangoJSONEncoder):
     pass
 
 
+def slugify(*parts):
+    text = " ".join(map(str, filter(None, parts)))
+    return re.sub(r"[\s-]+", "-", re.sub(r"[^0-9a-zA-Z\s_-]+", "", text.lower()))
+
+
 def _fake_data():
     return {
-        "city": ufaker.city(),
-        "height": ufaker.pyfloat(None, 3, True, 1, 3),
-        "weight": ufaker.pyint(40, 120, 5),
+        "city": faker.city(),
+        "height": faker.pyfloat(None, 3, True, 1, 3),
+        "weight": faker.pyint(40, 120, 5),
     }
 
 
@@ -45,6 +51,21 @@ class Person(m.Model):
         Extract(Now(), "year") - m.F("yob"), defer=False
     )
 
+    slug: str = VirtualField[m.SlugField](
+        m.functions.Lower(
+            Concat(
+                "first_name",
+                m.Value("_"),
+                "last_name",
+                m.Value("-"),
+                "yob",
+                "dob__month",
+            )
+        ),
+        unique=True,
+        defer=False,
+    )
+
     name = VirtualField("full_name", m.Value(""), cache=False)
 
     @name.getter
@@ -60,7 +81,7 @@ class Person(m.Model):
         pass
 
     country = VirtualField[m.CharField](
-        KT("data__country"), default=ufaker.country, defer=False, editable=True
+        KT("data__country"), default=faker.country, defer=False, editable=True
     )
     city = VirtualField[m.CharField](KT("data__city"), editable=True)
     height = VirtualField[m.DecimalField](
@@ -107,7 +128,7 @@ class Person(m.Model):
         return f"{self.__class__.__name__}({pformat(dct, 2, 12, 5)})"
 
     def __str__(self: "Self") -> str:
-        return f"{self.first_name}"
+        return f"{self.full_name}"
 
     @classmethod
     def create(cls, qs=None, /, *, data=None, **kw):
@@ -150,6 +171,7 @@ class Post(m.Model):
     _post_type_ = None
     objects = PostManager()
     title: str = m.CharField(max_length=255)
+    slug: str = m.SlugField(max_length=255)
     content: str = m.TextField()
     type: PostType = m.CharField(choices=PostType.choices, max_length=32)
     published_at: datetime.datetime = m.DateTimeField(null=True, default=timezone.now)
@@ -203,12 +225,19 @@ class Post(m.Model):
                 seconds=faker.random_int(180, 3600 * 72)
             )
 
+        title = faker.sentence(faker.random_int(3, 6))[:255]
+        for n in range(5):
+            slug = slugify(title, n)
+            if not qs.filter(slug=slug).exists():
+                break
+
         obj = qs.create(
             **{
-                "title": faker.sentence(faker.random_int(3, 6))[:255],
+                "title": title,
+                "slug": slug,
                 "type": type,
                 "content": "\n\n".join(
-                    ufaker.paragraph(faker.random_int(3, 6))
+                    faker.paragraph(faker.random_int(3, 6))
                     for _ in range(faker.random_int(2, 10))
                 ),
                 "published_at": faker.date_time_this_year(),
@@ -225,6 +254,9 @@ class Post(m.Model):
 
 class Article(Post):
     _post_type_ = PostType.article
+
+    writer = VirtualForeignKey(Person, "author_id", related_name="articles")
+    writer_slug = VirtualField[m.SlugField]("writer__slug")
 
     class Meta:
         proxy = True

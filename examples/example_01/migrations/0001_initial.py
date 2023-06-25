@@ -51,6 +51,7 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("title", models.CharField(max_length=255)),
+                ("slug", models.SlugField(max_length=255)),
                 ("content", models.TextField()),
                 (
                     "type",

@@ -8,7 +8,10 @@ def main():
     """Run administrative tasks."""
     argv = sys.argv
     s_opt = "--settings"
-    aliases = {"tests": "tests.app.settings", "examples": "examples.settings"}
+    aliases = {
+        "tests": "tests.test_virtual_fields.settings",
+        "examples": "examples.settings",
+    }
     if arg := s_opt in argv and argv[i := argv.index(s_opt) + 1]:
         if mod := aliases.get(arg.rstrip("-")):
             os.environ.setdefault("DJANGO_SETTINGS_MODULE", mod)
